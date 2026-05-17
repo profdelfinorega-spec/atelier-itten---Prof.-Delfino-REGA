@@ -1,0 +1,4099 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+import { Palette, Sun, Moon, ArrowRight, RefreshCcw, CheckCircle, XCircle, Trophy, User, Play, ListOrdered, Sparkles, AlertCircle, Copy, Check, ShieldAlert, Shield, Construction, Eye, MessageSquare, Send, BookOpen, Brush, Eraser, Trash2, Smile, HelpCircle } from 'lucide-react';
+
+import { initializeApp } from 'firebase/app';
+
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+
+import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
+
+ 
+
+// --- CONFIGURAZIONE FIREBASE ---
+
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+const app = initializeApp(firebaseConfig);
+
+const auth = getAuth(app);
+
+const db = getFirestore(app);
+
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'itten-game-id';
+
+ 
+
+// --- DATI DEI COLORI COMPLETI ---
+
+const COLORS = {
+
+  red: { id: 'red', hex: '#EF4444', name: 'Rosso' },
+
+  yellow: { id: 'yellow', hex: '#EAB308', name: 'Giallo' },
+
+  blue: { id: 'blue', hex: '#3B82F6', name: 'Blu' },
+
+  green: { id: 'green', hex: '#22C55E', name: 'Verde' },
+
+  orange: { id: 'orange', hex: '#F97316', name: 'Arancione' },
+
+  purple: { id: 'purple', hex: '#A855F7', name: 'Viola' },
+
+};
+
+ 
+
+const LEVELS_DATA = [
+
+  // 1. Scomposizione della Luce (Dal PDF - Fisica)
+
+  {
+
+    type: 'quiz',
+
+    title: "La Scomposizione della Luce",
+
+    desc: "Cosa accade quando un raggio di luce solare attraversa un prisma di cristallo?",
+
+    options: [
+
+      "Si scompone a ventaglio nei colori dello spettro elettromagnetico",
+
+      "Viene completamente assorbito e si trasforma in luce nera",
+
+      "Si riflette senza subire variazioni di colore",
+
+      "Si riscalda fino a diventare luce infrarossa"
+
+    ],
+
+    correct: 0,
+
+    expl: "La luce bianca solare, attraversando il prisma di cristallo, si scompone a ventaglio svelando i colori dello spettro elettromagnetico."
+
+  },
+
+  // 2. I Colori Primari (Dal PDF)
+
+  {
+
+    type: 'interactive-primaries',
+
+    title: "I Colori Primari",
+
+    desc: "Seleziona i 3 colori fondamentali che non si possono ottenere per mescolanza di altri colori."
+
+  },
+
+  // 3. UX/UI Design - I Bottoni (Dalla Guida Adobe)
+
+  {
+
+    type: 'quiz',
+
+    title: "UX/UI Design: Pulsanti di Azione",
+
+    desc: "Secondo la designer Aliza Ackerman, in un'interazione UX (User Experience) perché non dovresti usare il Blu per un pulsante 'Elimina'?",
+
+    options: [
+
+      "Perché il blu stimola troppo la fame dell'utente",
+
+      "Perché serve un colore come il Rosso che indichi avviso, catturi l'attenzione e chieda all'utente se vuole davvero procedere",
+
+      "Perché il blu è un colore troppo costoso da renderizzare sugli schermi",
+
+      "Perché il blu è tradizionalmente legato alla rabbia"
+
+    ],
+
+    correct: 1,
+
+    expl: "In UX design, il Rosso viene usato per le azioni distruttive (come 'Elimina') perché funge da sirena d'allarme, cattura l'attenzione e previene clic accidentali."
+
+  },
+
+  // 4. Rosso e Fast Food (Dalla Guida Adobe)
+
+  {
+
+    type: 'quiz',
+
+    title: "Rosso e Stimolo Fisico",
+
+    desc: "Perché quasi tutti i marchi di Fast Food includono il Rosso nella loro identity e palette grafica?",
+
+    options: [
+
+      "Perché rende i cibi visivamente più freddi e rinfrescanti",
+
+      "Perché è l'unico colore visibile di notte",
+
+      "Perché suscita una risposta fisica, rende le persone più affamate e stimola l'appetito spingendole a decidere in fretta",
+
+      "Perché simboleggia la calma e la digestione lenta"
+
+    ],
+
+    correct: 2,
+
+    expl: "Il Rosso stimola l'appetito e accelera i processi decisionali. Abbinato all'urgenza, è perfetto per i brand di ristorazione rapida."
+
+  },
+
+  // 5. La Sintesi del Viola (Dal PDF & Guida Adobe)
+
+  {
+
+    type: 'interactive-mix',
+
+    title: "La Sintesi del Viola",
+
+    desc: "Mescola i due colori primari adatti per ricavare il Viola, colore legato storicamente a lusso, regalità, ma anche fiducia e spiritualità.",
+
+    target: { id: 'purple', hex: '#A855F7', name: 'Viola' },
+
+    req: ['red', 'blue']
+
+  },
+
+  // 6. Arancione e Startup (Dalla Guida Adobe)
+
+  {
+
+    type: 'quiz',
+
+    title: "Ottimismo e Startup",
+
+    desc: "Per quale motivo molti brand tecnologici e nuove startup scelgono l'Arancione per la propria identità visiva?",
+
+    options: [
+
+      "Perché comunica serietà e rigore finanziario vecchio stile",
+
+      "Perché riduce la luminosità del sito web",
+
+      "Perché incanala ottimismo, energia giovanile, allegria ed è estremamente invitante",
+
+      "Perché è un colore neutro che passa del tutto inosservato"
+
+    ],
+
+    correct: 2,
+
+    expl: "L'Arancione unisce la vitalità del rosso e l'allegria del giallo. È un colore potente e amichevole che trasmette innovazione ed entusiasmo giovanile."
+
+  },
+
+  // 7. Il Verde e i suoi Signifcati (Dalla Guida Adobe & PDF)
+
+  {
+
+    type: 'quiz',
+
+    title: "Le Sfumature del Verde",
+
+    desc: "Il Verde è versatile: come cambia l'emozione evocata passando da sfumature tenui (pastello) a una tonalità accesa e vivace?",
+
+    options: [
+
+      "Le sfumature tenui calmano e rilassano, mentre il verde vivace offre freschezza, dinamicità o rimanda all'ambito finanziario",
+
+      "Il verde tenue è aggressivo, mentre il verde acceso stimola il sonno",
+
+      "Non vi è alcuna differenza, l'occhio umano li percepisce identici",
+
+      "Il verde tenue indica ricchezza, mentre il verde vivace indica tristezza"
+
+    ],
+
+    correct: 0,
+
+    expl: "In sfumature tenui il verde ha un effetto rilassante e biologico (studi di yoga o cibi sani), mentre sfumature accese donano energia visiva o richiamano la finanza."
+
+  },
+
+  // 8. Equilibrio della retina (Dal PDF)
+
+  {
+
+    type: 'quiz',
+
+    title: "L'Armonia e la Retina",
+
+    desc: "Se chiudi gli occhi dopo aver osservato intensamente un quadrato bianco su fondo nero, quale immagine residua permane sulla retina per cercare l'equilibrio?",
+
+    options: [
+
+      "Un quadrato nero",
+
+      "Un quadrato bianco",
+
+      "Un cerchio grigio",
+
+      "Nessuna forma"
+
+    ],
+
+    correct: 0,
+
+    expl: "Sulla retina permane temporaneamente un quadrato nero: il nostro sistema visivo compensa gli stimoli estremi per ristabilire l'equilibrio psicofisico."
+
+  },
+
+  // 9. Il Grigio Neutro (Dal PDF)
+
+  {
+
+    type: 'quiz',
+
+    title: "L'Equilibrio di Itten",
+
+    desc: "Secondo Itten e la scienza del colore, qual è il colore ideale per il mantenimento dell'equilibrio psicofisico dell'occhio umano?",
+
+    options: [
+
+      "Il rosso puro",
+
+      "Il bianco solare",
+
+      "Il grigio neutro",
+
+      "Il blu profondo"
+
+    ],
+
+    correct: 2,
+
+    expl: "Il grigio neutro rappresenta il point perfetto in cui l'occhio e la retina non devono compiere alcuno sforzo compensativo visivo."
+
+  },
+
+  // 10. I Complementari nel Design (Dal PDF & Guida Adobe)
+
+  {
+
+    type: 'interactive-complementary',
+
+    title: "Il Massimo Contrasto",
+
+    desc: "Trova il colore complementare del Giallo. Nel design grafico e pubblicitario, accostare i due opposti genera la massima vibrazione visiva attirando lo sguardo.",
+
+    target: { id: 'yellow', hex: '#EAB308', name: 'Giallo' },
+
+    correctId: 'purple'
+
+  },
+
+  // 11. Relatività Culturale dei Colori (Dalla Guida Adobe)
+
+  {
+
+    type: 'quiz',
+
+    title: "La Cultura del Colore: Il Bianco",
+
+    desc: "I colori non hanno lo stesso significato ovunque. Se in Occidente il Bianco simboleggia purezza e innocenza, cosa rappresenta tradizionalmente in Cina?",
+
+    options: [
+
+      "La ricchezza e i soldi",
+
+      "La giovinezza e lo sport",
+
+      "La morte e il lutto (usato tradizionalmente ai funerali)",
+
+      "La fame e la ristorazione rapida"
+
+    ],
+
+    correct: 2,
+
+    expl: "In Cina il bianco è associato al lutto e alla morte. Chi progetta per un pubblico globale deve studiare l'impatto culturale per preventivare fraintendimenti."
+
+  },
+
+  // 12. Evoluzione Storica: Il Rosa (Dalla Guida Adobe)
+
+  {
+
+    type: 'quiz',
+
+    title: "L'Evoluzione del Rosa",
+
+    desc: "Il Rosa è un esempio straordinario di come i significati dei colori cambino nel tempo. Quale transizione ha vissuto nella società?",
+
+    options: [
+
+      "È passato da colore esclusivamente legato alla tecnologia a colore legato alla medicina",
+
+      "Un tempo era considerato un colore prettamente da 'bambino/maschile', mentre oggi è largamente associato alla femminilità, cura e gioco",
+
+      "È diventato un colore caldo dopo essere stato freddo per secoli",
+
+      "È stato bandito dalla comunicazione grafica moderna"
+
+    ],
+
+    correct: 1,
+
+    expl: "I significati dei colori non sono rigidi ma cambiano con l'evoluzione storica e sociale. Il rosa ne è the perfetto esempio."
+
+  },
+
+  // 13. Evitare l'affaticamento visivo (Dalla Guida Adobe)
+
+  {
+
+    type: 'quiz',
+
+    title: "Design UX: Affaticamento Visivo",
+
+    desc: "Quale accorgimento adotta la designer Aliza Ackerman sugli schermi digitali per rendere l'interfaccia più riposante per l'occhio dell'utente?",
+
+    options: [
+
+      "Utilizza solo sfondi rosso acceso ad alta saturazione",
+
+      "Progetta i siti esclusivamente in scala di grigi senza colori primari",
+
+      "Sposta la luminosità di un paio di punti dal bianco o nero puro, usando un grigio chiarissimo o un bianco sporco",
+
+      "Usa lo sfarfallio dello schermo a intermittenza"
+
+    ],
+
+    correct: 2,
+
+    expl: "I contrasti di bianco puro e nero puro al 100% possono stancare la vista sugli schermi. Usare un bianco leggermente sporco o un grigio scurissimo facilita la lettura."
+
+  },
+
+  // 14. Contrasto Chiaro-Scuro & Colori Silenziosi (Dal PDF & Adobe)
+
+  {
+
+    type: 'interactive-light',
+
+    title: "Schiarire e Silenziare",
+
+    desc: "Trascina il cursore verso destra per aggiungere luce (Bianco) al Rosso. In questo modo creerai un rosa pastello 'silenzioso', che evoca calma e neutralità.",
+
+  },
+
+  // 15. Contrasto di Complementari (Dal PDF)
+
+  {
+
+    type: 'quiz',
+
+    title: "La Neutralizzazione Visiva",
+
+    desc: "Cosa accade se in una striscia grafica aggiungiamo progressivamente due colori complementari opposti l'uno all'altro fino ad arrivare esattamente a metà?",
+
+    options: [
+
+      "Si scontrano creando un bagliore accecante",
+
+      "Si fondono nel grigio neutro, annullando la saturazione reciproca",
+
+      "Svaniscono lasciando lo spazio totalmente bianco",
+
+      "Danno origine a un colore primario puro"
+
+    ],
+
+    correct: 1,
+
+    expl: "A metà della scala dei complementari, le due tinte opposte si compensano interamente neutralizzandosi nel grigio armonico."
+
+  }
+
+];
+
+ 
+
+export default function App() {
+
+  // Stati di Autenticazione e Profilo
+
+  const [user, setUser] = useState(null);
+
+  const [nickname, setNickname] = useState('');
+
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+
+ 
+
+  // Stati dell'App
+
+  const [view, setView] = useState('menu');
+
+  const [level, setLevel] = useState(0);
+
+  const [score, setScore] = useState(0);
+
+  const [feedback, setFeedback] = useState(null);
+
+  const [leaderboard, setLeaderboard] = useState([]);
+
+ 
+
+  // Stati per il Laboratorio AI Brand
+
+  const [aiBrandDescription, setAiBrandDescription] = useState('');
+
+  const [aiMood, setAiMood] = useState('Energia e Innovazione');
+
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
+  const [aiResponse, setAiResponse] = useState(null);
+
+  const [aiError, setAiError] = useState(null);
+
+  const [copiedIndex, setCopiedIndex] = useState(null);
+
+ 
+
+  // Stati per il Laboratorio Segnaletica di Sicurezza AI
+
+  const [safetyCategory, setSafetyCategory] = useState('Divieto');
+
+  const [safetyScenario, setSafetyScenario] = useState('');
+
+  const [isSafetyLoading, setIsSafetyLoading] = useState(false);
+
+  const [safetyResponse, setSafetyResponse] = useState(null);
+
+  const [safetyError, setSafetyError] = useState(null);
+
+ 
+
+  // Stati per il Tutor Chat AI
+
+  const [chatMessages, setChatMessages] = useState([
+
+    { sender: 'ai', text: "Ciao! Sono il tuo Tutor Virtuale dell'Atelier. Chiedimi pure qualsiasi cosa sui 7 contrasti di Itten, sulla scomposizione ottica, sulla psicologia cromatico-emotiva o su come i grandi brand scelgono le loro palette!" }
+
+  ]);
+
+  const [chatInput, setChatInput] = useState('');
+
+  const [isChatLoading, setIsChatLoading] = useState(false);
+
+  const chatEndRef = useRef(null);
+
+ 
+
+  // Stati per il Laboratorio Disegno Emoji AI
+
+  const [isDrawingEmojiLoading, setIsDrawingEmojiLoading] = useState(false);
+
+  const [emojiResponse, setEmojiResponse] = useState(null);
+
+  const [emojiError, setEmojiError] = useState(null);
+
+ 
+
+  // Inizializzazione Autenticazione (Regola Firebase 3)
+
+  useEffect(() => {
+
+    const initAuth = async () => {
+
+      try {
+
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+
+          await signInWithCustomToken(auth, __initial_auth_token);
+
+        } else {
+
+          await signInAnonymously(auth);
+
+        }
+
+      } catch (err) {
+
+        console.error("Errore di autenticazione:", err);
+
+      }
+
+    };
+
+    initAuth();
+
+ 
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+
+      setUser(currentUser);
+
+      if (currentUser) {
+
+        try {
+
+          const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'main');
+
+          const profileSnap = await getDoc(profileRef);
+
+          if (profileSnap.exists()) {
+
+            setNickname(profileSnap.data().nickname);
+
+            setView('menu');
+
+          } else {
+
+            setView('registration');
+
+          }
+
+        } catch (err) {
+
+          console.error("Errore fetch profilo:", err);
+
+          setView('registration');
+
+        }
+
+      }
+
+      setIsLoadingAuth(false);
+
+    });
+
+ 
+
+    return () => unsubscribe();
+
+  }, []);
+
+ 
+
+  // Sincronizzazione Realtime Classifica (Regole Firebase 1 & 2)
+
+  useEffect(() => {
+
+    if (!user) return;
+
+   
+
+    const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+
+    const unsubscribe = onSnapshot(leaderboardRef, (snapshot) => {
+
+      const data = [];
+
+      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+
+      data.sort((a, b) => b.score - a.score);
+
+      setLeaderboard(data.slice(0, 10));
+
+    }, (err) => {
+
+      console.error("Errore fetch leaderboard:", err);
+
+    });
+
+ 
+
+    return () => unsubscribe();
+
+  }, [user]);
+
+ 
+
+  // Auto scroll chat
+
+  useEffect(() => {
+
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+  }, [chatMessages]);
+
+ 
+
+  const saveScoreToLeaderboard = async (finalScore) => {
+
+    if (!user || !nickname) return;
+
+    try {
+
+      const lbRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', user.uid);
+
+      const lbSnap = await getDoc(lbRef);
+
+      if (lbSnap.exists() && lbSnap.data().score > finalScore) {
+
+        return;
+
+      }
+
+     
+
+      await setDoc(lbRef, {
+
+        nickname: nickname,
+
+        score: finalScore,
+
+        timestamp: new Date().toISOString()
+
+      });
+
+    } catch (err) {
+
+      console.error("Errore salvataggio punteggio:", err);
+
+    }
+
+  };
+
+ 
+
+  const handleRegister = async (e, chosenNickname) => {
+
+    e.preventDefault();
+
+    if (!chosenNickname.trim() || !user) return;
+
+    try {
+
+      const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main');
+
+      await setDoc(profileRef, { nickname: chosenNickname });
+
+      setNickname(chosenNickname);
+
+      setView('menu');
+
+    } catch (err) {
+
+      console.error("Errore salvataggio nickname:", err);
+
+    }
+
+  };
+
+ 
+
+  const startGame = () => {
+
+    setView('playing');
+
+    setLevel(0);
+
+    setScore(0);
+
+    setFeedback(null);
+
+  };
+
+ 
+
+  const nextLevel = () => {
+
+    if (level < LEVELS_DATA.length - 1) {
+
+      setLevel(level + 1);
+
+      setFeedback(null);
+
+    } else {
+
+      saveScoreToLeaderboard(score);
+
+      setView('end');
+
+    }
+
+  };
+
+ 
+
+  const showFeedback = (isCorrect, message, points = 100) => {
+
+    setFeedback({ isCorrect, message });
+
+    if (isCorrect) setScore(s => s + points);
+
+    setTimeout(() => {
+
+      if (isCorrect) nextLevel();
+
+      else setFeedback(null);
+
+    }, 4500);
+
+  };
+
+ 
+
+  const copyToClipboard = (hexText, index) => {
+
+    const el = document.createElement('textarea');
+
+    el.value = hexText;
+
+    document.body.appendChild(el);
+
+    el.select();
+
+    document.execCommand('copy');
+
+    document.body.removeChild(el);
+
+ 
+
+    setCopiedIndex(index);
+
+    setTimeout(() => setCopiedIndex(null), 1500);
+
+  };
+
+ 
+
+  // --- LOGICA CHIAMATA GEMINI API PER BRAND PALETTE ---
+
+  const handleGenerateAIPalette = async () => {
+
+    if (!aiBrandDescription.trim()) return;
+
+    setIsAiLoading(true);
+
+    setAiError(null);
+
+    setAiResponse(null);
+
+ 
+
+    const promptText = `Crea un'analisi cromatico-psicologica completa basata su Itten e sulla psicologia del marketing per il seguente brand/progetto: "${aiBrandDescription}".
+
+Umore/Sensazione target desiderato: "${aiMood}".
+
+ 
+
+Includi nel JSON di risposta:
+
+1. "paletteName": un nome creativo per questa palette cromatico-funzionale.
+
+2. "colors": un array di 4 elementi contenente colori coordinati. Per ogni colore includi: "hex" (un codice colore esadecimale valido, es. #FF5733), "name" (un nome italiano elegante per la sfumatura), "role" (es. Primario, Accento, Sfondo, Neutro) e "psychology" (spiegazione di come influisce sulle emozioni dell'utente).
+
+3. "ittenContrast": spiega quale dei 7 contrasti di Itten viene raccomandato per valorizzare l'accordo cromatico e perché.
+
+4. "marketingExplanation": l'impatto sul branding e sulle decisioni d'acquisto.
+
+5. "uxTip": un consiglio pratico di design UX/UI per schermi digitali (es. sul contrasto dei bottoni, o sull'affaticamento visivo).`;
+
+ 
+
+    const apiKey = "";
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+ 
+
+    const schema = {
+
+      type: "OBJECT",
+
+      properties: {
+
+        paletteName: { type: "STRING" },
+
+        colors: {
+
+          type: "ARRAY",
+
+          items: {
+
+            type: "OBJECT",
+
+            properties: {
+
+              hex: { type: "STRING" },
+
+              name: { type: "STRING" },
+
+              role: { type: "STRING" },
+
+              psychology: { type: "STRING" }
+
+            },
+
+            required: ["hex", "name", "role", "psychology"]
+
+          }
+
+        },
+
+        ittenContrast: { type: "STRING" },
+
+        marketingExplanation: { type: "STRING" },
+
+        uxTip: { type: "STRING" }
+
+      },
+
+      required: ["paletteName", "colors", "ittenContrast", "marketingExplanation", "uxTip"]
+
+    };
+
+ 
+
+    const payload = {
+
+      contents: [{ parts: [{ text: promptText }] }],
+
+      systemInstruction: {
+
+        parts: [{ text: "Sei un assistente AI specializzato nella teoria del colore di Itten, design UX/UI e psicologia del marketing. Genera risposte rigorosamente in formato JSON." }]
+
+      },
+
+      generationConfig: {
+
+        responseMimeType: "application/json",
+
+        responseSchema: schema
+
+      }
+
+    };
+
+ 
+
+    let delay = 1000;
+
+    let success = false;
+
+    let resultJson = null;
+
+ 
+
+    for (let i = 0; i < 5; i++) {
+
+      try {
+
+        const response = await fetch(url, {
+
+          method: "POST",
+
+          headers: { "Content-Type": "application/json" },
+
+          body: JSON.stringify(payload)
+
+        });
+
+        if (response.ok) {
+
+          const resultData = await response.json();
+
+          const rawText = resultData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+          if (rawText) {
+
+            resultJson = JSON.parse(rawText);
+
+            success = true;
+
+            break;
+
+          }
+
+        }
+
+      } catch (err) {}
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+      delay *= 2;
+
+    }
+
+ 
+
+    setIsAiLoading(false);
+
+    if (success && resultJson) {
+
+      setAiResponse(resultJson);
+
+    } else {
+
+      setAiError("La connessione con il Server AI di Itten ha riscontrato un rallentamento. Riprova più tardi.");
+
+    }
+
+  };
+
+ 
+
+  // --- LOGICA CHIAMATA GEMINI API PER SEGNALETICA DI SICUREZZA ---
+
+  const handleGenerateSafetySign = async () => {
+
+    if (!safetyScenario.trim()) return;
+
+    setIsSafetyLoading(true);
+
+    setSafetyError(null);
+
+    setSafetyResponse(null);
+
+ 
+
+    const promptText = `Disegna e analizza un segnale di sicurezza o stradale specifico per questo contesto/pericolo: "${safetyScenario}".
+
+Categoria normativa richiesta: "${safetyCategory}".
+
+ 
+
+Devi restituire un oggetto JSON conforme alla normativa UNI EN ISO 7010 (per la sicurezza sul lavoro) o al Codice della Strada.
+
+Fornisci:
+
+1. "signTitle": Il nome ufficiale o titolo descrittivo del segnale.
+
+2. "regulatoryCategory": La categoria normativa (es. Segnale di divieto, Segnale di prescrizione/obbligo, Segnale di avvertimento, Salvataggio e soccorso, Attrezzatura antincendio, Segnale stradale di pericolo/indicazione).
+
+3. "shape": La forma geometrica del segnale. Deve essere rigorosamente uno tra: "triangle", "circle", "square", "rectangle".
+
+4. "bgColor": Il codice colore esadecimale di sfondo regolamentare.
+
+5. "borderColor": Il codice colore esadecimale del bordo.
+
+6. "textColor": Il codice colore esadecimale del pittogramma interno.
+
+7. "symbolPath": Un XML/SVG path (la stringa d di un tag <path>) che rappresenta l'icona interna.
+
+8. "symbolDescription": Una breve descrizione di cosa raffigura il pittogramma.
+
+9. "behavioralRule": Qual è la precisa prescrizione comportamentale o il divieto assoluto imposto da questo segnale.
+
+10. "technicalStandards": I riferimenti legislativi esatti e la spiegazione del contrasto cromatico applicato.`;
+
+ 
+
+    const apiKey = "";
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+ 
+
+    const schema = {
+
+      type: "OBJECT",
+
+      properties: {
+
+        signTitle: { type: "STRING" },
+
+        regulatoryCategory: { type: "STRING" },
+
+        shape: { type: "STRING", description: "Deve essere 'triangle', 'circle', 'square' o 'rectangle'" },
+
+        bgColor: { type: "STRING" },
+
+        borderColor: { type: "STRING" },
+
+        textColor: { type: "STRING" },
+
+        symbolPath: { type: "STRING" },
+
+        symbolDescription: { type: "STRING" },
+
+        behavioralRule: { type: "STRING" },
+
+        technicalStandards: { type: "STRING" }
+
+      },
+
+      required: ["signTitle", "regulatoryCategory", "shape", "bgColor", "borderColor", "textColor", "symbolPath", "symbolDescription", "behavioralRule", "technicalStandards"]
+
+    };
+
+ 
+
+    const payload = {
+
+      contents: [{ parts: [{ text: promptText }] }],
+
+      systemInstruction: {
+
+        parts: [{ text: "Sei un ingegnere della sicurezza sui luoghi di lavoro ed esperto del Codice della Strada italiano. Generi segnali stradali e di sicurezza conformi alla norma UNI EN ISO 7010 in formato JSON strutturato, disegnando un pittogramma SVG personalizzato." }]
+
+      },
+
+      generationConfig: {
+
+        responseMimeType: "application/json",
+
+        responseSchema: schema
+
+      }
+
+    };
+
+ 
+
+    let delay = 1000;
+
+    let success = false;
+
+    let resultJson = null;
+
+ 
+
+    for (let i = 0; i < 5; i++) {
+
+      try {
+
+        const response = await fetch(url, {
+
+          method: "POST",
+
+          headers: { "Content-Type": "application/json" },
+
+          body: JSON.stringify(payload)
+
+        });
+
+        if (response.ok) {
+
+          const resultData = await response.json();
+
+          const rawText = resultData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+          if (rawText) {
+
+            resultJson = JSON.parse(rawText);
+
+            success = true;
+
+            break;
+
+          }
+
+        }
+
+      } catch (err) {}
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+      delay *= 2;
+
+    }
+
+ 
+
+    setIsSafetyLoading(false);
+
+    if (success && resultJson) {
+
+      setSafetyResponse(resultJson);
+
+    } else {
+
+      setSafetyError("Impossibile connettersi al Server AI per la Segnaletica di Sicurezza. Verifica la connessione e riprova.");
+
+    }
+
+  };
+
+ 
+
+  // --- LOGICA CHIAMATA GEMINI API PER TUTOR CHAT ---
+
+  const handleSendChatMessage = async () => {
+
+    if (!chatInput.trim() || isChatLoading) return;
+
+    const userMessage = chatInput;
+
+    setChatMessages(prev => [...prev, { sender: 'user', text: userMessage }]);
+
+    setChatInput('');
+
+    setIsChatLoading(true);
+
+ 
+
+    const promptText = `L'utente dice: "${userMessage}".
+
+Rispondi con un tono accattivante, empatico e altamente educativo, simulando un tutor esperto di teoria dell'arte e di psicologia del colore. Rimani in linea con la teoria del colore di Johannes Itten e la percezione ottica. Mantieni la risposta concisa (massimo 4-5 frasi d'impatto) e in lingua italiana.`;
+
+ 
+
+    const apiKey = "";
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+ 
+
+    const payload = {
+
+      contents: [{ parts: [{ text: promptText }] }],
+
+      systemInstruction: {
+
+        parts: [{ text: "Sei un professore universitario di Arti Visive ed esperto dei 7 contrasti cromatici di Johannes Itten, della psicologia del marketing legata al colore e del design UX/UI." }]
+
+      }
+
+    };
+
+ 
+
+    let delay = 1000;
+
+    let success = false;
+
+    let aiText = "Il server del Tutor AI non risponde momentaneamente. Per favore riprova tra poco!";
+
+ 
+
+    for (let i = 0; i < 5; i++) {
+
+      try {
+
+        const response = await fetch(url, {
+
+          method: "POST",
+
+          headers: { "Content-Type": "application/json" },
+
+          body: JSON.stringify(payload)
+
+        });
+
+        if (response.ok) {
+
+          const resultData = await response.json();
+
+          const text = resultData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+          if (text) {
+
+            aiText = text;
+
+            success = true;
+
+            break;
+
+          }
+
+        }
+
+      } catch (err) {}
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+      delay *= 2;
+
+    }
+
+ 
+
+    setIsChatLoading(false);
+
+    setChatMessages(prev => [...prev, { sender: 'ai', text: aiText }]);
+
+  };
+
+ 
+
+  // --- LOGICA CHIAMATA GEMINI API PER DISEGNO EMOJI AI ---
+
+  const handleAnalyzeEmojiDrawing = async (base64Png) => {
+
+    setIsDrawingEmojiLoading(true);
+
+    setEmojiError(null);
+
+    setEmojiResponse(null);
+
+ 
+
+    const promptText = `Analizza questa immagine disegnata a mano dall'utente sulla tela. Rappresenta la bozza di un'emoji o espressione emotiva.
+
+Interpreta le forme dei tratti, i colori e lo stile visivo.
+
+Restituisci un file JSON strutturato con i seguenti campi precisi:
+
+1. "emojiName": Un nome divertente ed espressivo in italiano per questa emoji (es. "La Gioia Gialla di Itten" o "La Tristezza Blu").
+
+2. "svgOutput": Un codice SVG completo, pulito e perfettamente formattato (con viewBox="0 0 100 100") che rappresenta la versione vettoriale digitale e rifinita di questa emoji. Usa forme ricche (<circle>, <path d="..." />, <ellipse>, ecc.), gradienti se necessario, e colori accattivanti che si ispirano al disegno dell'utente per creare un'emoji professionale di alta qualità.
+
+3. "detectedColors": Un array di stringhe che elenca i colori principali rilevati nel disegno e la loro interpretazione emotiva/marketing (es. "Rosso: evoca rabbia o urgenza").
+
+4. "ittenAnalysis": Un'analisi dettagliata di quali contrasti di Itten (es. contrasto chiaro-scuro, contrasto di colori caldi e freddi, contrasto dei complementari) sono applicati o suggeriti in questa emoji.
+
+5. "psychologicalProfile": Una spiegazione psicologica e comunicativa approfondita dell'emozione o dello stato d'animo trasmesso da questa creazione.`;
+
+ 
+
+    const apiKey = "";
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+ 
+
+    const schema = {
+
+      type: "OBJECT",
+
+      properties: {
+
+        emojiName: { type: "STRING" },
+
+        svgOutput: { type: "STRING", description: "Codice SVG completo e valido (viewBox '0 0 100 100') che rappresenta l'emoji stilizzata digitale basata sul disegno" },
+
+        detectedColors: {
+
+          type: "ARRAY",
+
+          items: { type: "STRING" }
+
+        },
+
+        ittenAnalysis: { type: "STRING" },
+
+        psychologicalProfile: { type: "STRING" }
+
+      },
+
+      required: ["emojiName", "svgOutput", "detectedColors", "ittenAnalysis", "psychologicalProfile"]
+
+    };
+
+ 
+
+    const payload = {
+
+      contents: [{
+
+        role: "user",
+
+        parts: [
+
+          { text: promptText },
+
+          { inlineData: { mimeType: "image/png", data: base64Png } }
+
+        ]
+
+      }],
+
+      systemInstruction: {
+
+        parts: [{ text: "Sei un illustratore esperto di icone digitali, specialista di psicologia del colore applicata alle emoji e docente d'arte della scuola del Bauhaus." }]
+
+      },
+
+      generationConfig: {
+
+        responseMimeType: "application/json",
+
+        responseSchema: schema
+
+      }
+
+    };
+
+ 
+
+    let delay = 1000;
+
+    let success = false;
+
+    let resultJson = null;
+
+ 
+
+    for (let i = 0; i < 5; i++) {
+
+      try {
+
+        const response = await fetch(url, {
+
+          method: "POST",
+
+          headers: { "Content-Type": "application/json" },
+
+          body: JSON.stringify(payload)
+
+        });
+
+        if (response.ok) {
+
+          const resultData = await response.json();
+
+          const rawText = resultData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+          if (rawText) {
+
+            resultJson = JSON.parse(rawText);
+
+            success = true;
+
+            break;
+
+          }
+
+        }
+
+      } catch (err) {}
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+      delay *= 2;
+
+    }
+
+ 
+
+    setIsDrawingEmojiLoading(false);
+
+    if (success && resultJson) {
+
+      setEmojiResponse(resultJson);
+
+    } else {
+
+      setEmojiError("La connessione con il Server AI di Itten per l'analisi dei disegni ha riscontrato un problema. Riprova ad effettuare il caricamento.");
+
+    }
+
+  };
+
+ 
+
+  return (
+
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-blue-200 pb-12 flex flex-col justify-between">
+
+      <div>
+
+        {/* HEADER GLOBALE */}
+
+        <header className="bg-white shadow-sm p-4 sticky top-0 z-10 border-b border-slate-100">
+
+          <div className="max-w-4xl mx-auto flex justify-between items-center">
+
+            <div className="flex flex-col cursor-pointer" onClick={() => nickname && setView('menu')}>
+
+              <div className="flex items-center gap-2">
+
+                <Palette className="text-purple-600 w-6 h-6 animate-pulse" />
+
+                <h1 className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500">
+
+                  L'Atelier di Itten
+
+                </h1>
+
+              </div>
+
+              <span className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded border border-slate-100 self-start">
+
+                Materiale didattico Prof. Delfino REGA
+
+              </span>
+
+            </div>
+
+           
+
+            <div className="flex items-center gap-4">
+
+              {view === 'playing' && (
+
+                <div className="flex items-center gap-4 font-semibold text-slate-600">
+
+                  <span>Sfida {level + 1}/{LEVELS_DATA.length}</span>
+
+                  <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm">
+
+                    Punti: {score}
+
+                  </span>
+
+                </div>
+
+              )}
+
+              {nickname && view !== 'playing' && (
+
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+
+                  <User className="w-4 h-4 text-indigo-500" /> {nickname}
+
+                </div>
+
+              )}
+
+            </div>
+
+          </div>
+
+        </header>
+
+ 
+
+        <main className="max-w-4xl mx-auto p-4 mt-6">
+
+          {/* SCHERMATE PRINCIPALI */}
+
+          {view === 'registration' && <RegistrationScreen onRegister={handleRegister} />}
+
+         
+
+          {view === 'menu' && (
+
+            <MenuScreen
+
+              onStart={startGame}
+
+              onLeaderboard={() => setView('leaderboard')}
+
+              onAiLab={() => setView('ai-lab')}
+
+              onSafetyLab={() => setView('safety-lab')}
+
+              onChatLab={() => setView('ai-chat')}
+
+              onEmojiLab={() => setView('emoji-lab')}
+
+              onPuzzleLab={() => setView('puzzle-lab')}
+
+            />
+
+          )}
+
+ 
+
+          {view === 'leaderboard' && (
+
+            <LeaderboardScreen leaderboard={leaderboard} onBack={() => setView('menu')} />
+
+          )}
+
+ 
+
+          {/* SCHERMATA LAB DISEGNO EMOJI AI */}
+
+          {view === 'emoji-lab' && (
+
+            <EmojiDrawingLab
+
+              isLoading={isDrawingEmojiLoading}
+
+              error={emojiError}
+
+              response={emojiResponse}
+
+              onAnalyze={handleAnalyzeEmojiDrawing}
+
+              onBack={() => setView('menu')}
+
+            />
+
+          )}
+
+ 
+
+          {/* SCHERMATA NUOVO LAB PUZZLE DRAG & DROP */}
+
+          {view === 'puzzle-lab' && (
+
+            <IttenPuzzleLab
+
+              onBack={() => setView('menu')}
+
+              onVictory={(bonus) => {
+
+                setScore(s => s + bonus);
+
+                saveScoreToLeaderboard(score + bonus);
+
+              }}
+
+            />
+
+          )}
+
+ 
+
+          {/* SCHERMATA CHAT AI TUTOR */}
+
+          {view === 'ai-chat' && (
+
+            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 flex flex-col h-[600px]">
+
+              <div className="bg-gradient-to-r from-indigo-700 to-purple-800 text-white p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+
+                <div className="flex items-center gap-2">
+
+                  <MessageSquare className="w-5 h-5 text-indigo-200 animate-bounce" />
+
+                  <div>
+
+                    <h2 className="text-xl font-bold">Tutor Personale Itten AI ✨</h2>
+
+                    <p className="text-xs text-indigo-200">Ottieni risposte istantanee sulla teoria del colore, contrasti e marketing</p>
+
+                  </div>
+
+                </div>
+
+                <div className="flex items-center gap-2">
+
+                  <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+
+                    Materiale didattico Prof. Delfino REGA
+
+                  </span>
+
+                  <button onClick={() => setView('menu')} className="bg-white/10 hover:bg-white/20 text-white font-bold py-1.5 px-4 rounded-xl text-xs transition-colors">
+
+                    Esci
+
+                  </button>
+
+                </div>
+
+              </div>
+
+ 
+
+              {/* Corpo Chat */}
+
+              <div className="flex-grow p-4 overflow-y-auto space-y-4 bg-slate-50/50">
+
+                {chatMessages.map((msg, idx) => (
+
+                  <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+
+                    <div className={`max-w-[80%] rounded-2xl p-4 text-sm ${msg.sender === 'user' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'bg-white text-slate-700 border border-slate-100 shadow-sm'}`}>
+
+                      <p className="whitespace-pre-line leading-relaxed">{msg.text}</p>
+
+                    </div>
+
+                  </div>
+
+                ))}
+
+                {isChatLoading && (
+
+                  <div className="flex justify-start">
+
+                    <div className="bg-white text-slate-400 border border-slate-100 p-4 rounded-2xl text-xs font-semibold animate-pulse flex items-center gap-2">
+
+                      <Sparkles className="w-4 h-4 text-indigo-500 animate-spin" /> Il Tutor sta scrivendo...
+
+                    </div>
+
+                  </div>
+
+                )}
+
+                <div ref={chatEndRef} />
+
+              </div>
+
+ 
+
+              {/* Input Chat */}
+
+              <div className="p-4 bg-white border-t border-slate-100 flex gap-2">
+
+                <input
+
+                  type="text"
+
+                  className="flex-grow p-3.5 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm"
+
+                  placeholder="Chiedimi ad esempio: Cos'è il contrasto simultaneo?"
+
+                  value={chatInput}
+
+                  onChange={e => setChatInput(e.target.value)}
+
+                  onKeyDown={e => e.key === 'Enter' && handleSendChatMessage()}
+
+                />
+
+                <button
+
+                  onClick={handleSendChatMessage}
+
+                  disabled={isChatLoading || !chatInput.trim()}
+
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white p-3.5 rounded-xl transition-all active:scale-95 flex items-center justify-center flex-shrink-0"
+
+                >
+
+                  <Send className="w-4 h-4" />
+
+                </button>
+
+              </div>
+
+            </div>
+
+          )}
+
+ 
+
+          {/* SCHERMATA LAB BRAND AI */}
+
+          {view === 'ai-lab' && (
+
+            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+
+              <div className="bg-gradient-to-r from-purple-800 to-indigo-800 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+                <div>
+
+                  <span className="text-xs uppercase font-extrabold tracking-widest text-indigo-200 flex items-center gap-1.5">
+
+                    <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Innovazione Didattica
+
+                  </span>
+
+                  <h2 className="text-2xl font-bold mt-1">Laboratorio Cromatico AI ✨</h2>
+
+                  <p className="text-slate-200 text-base">Descrivi la tua idea di business o progetto di design. L'Intelligenza Artificiale analizzerà le risonanze cromatiche unendo Itten e le linee guida Adobe.</p>
+
+                </div>
+
+                <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center">
+
+                  Materiale didattico Prof. Delfino REGA
+
+                </span>
+
+              </div>
+
+ 
+
+              <div className="p-6 sm:p-8 space-y-6">
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                  <div className="md:col-span-2 space-y-4">
+
+                    <label className="block text-sm font-bold text-slate-700">Descrizione dell'Idea o del Brand</label>
+
+                    <textarea
+
+                      rows="3"
+
+                      className="w-full p-4 border-2 border-slate-200 rounded-2xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all text-sm"
+
+                      placeholder="Esempio: Una clinica odontoiatrica moderna per bambini, con sale giochi, che vuole trasmettere calma ma anche allegria e serenità ai genitori..."
+
+                      value={aiBrandDescription}
+
+                      onChange={e => setAiBrandDescription(e.target.value)}
+
+                    />
+
+                  </div>
+
+                 
+
+                  <div className="space-y-4">
+
+                    <label className="block text-sm font-bold text-slate-700">Umore & Emozioni Target</label>
+
+                    <select
+
+                      className="w-full p-4 border-2 border-slate-200 bg-white rounded-2xl outline-none focus:border-indigo-500 transition-all text-sm font-medium"
+
+                      value={aiMood}
+
+                      onChange={e => setAiMood(e.target.value)}
+
+                    >
+
+                      <option value="Energia e Innovazione">Energia e Innovazione</option>
+
+                      <option value="Calma e Sicurezza professionale">Calma e Sicurezza professionale</option>
+
+                      <option value="Lusso ed Eleganza d'élite">Lusso ed Eleganza d'élite</option>
+
+                      <option value="Creatività e Divertimento giocoso">Creatività e Divertimento giocoso</option>
+
+                      <option value="Naturalezza, Salute e Sostenibilità">Naturalezza, Salute e Sostenibilità</option>
+
+                    </select>
+
+                  </div>
+
+                </div>
+
+ 
+
+                <div className="flex gap-4">
+
+                  <button
+
+                    onClick={handleGenerateAIPalette}
+
+                    disabled={isAiLoading || !aiBrandDescription.trim()}
+
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:scale-100 text-white font-bold py-4 px-8 rounded-full text-base transition-all hover:scale-105 active:scale-95 flex items-center gap-2 shadow-lg shadow-indigo-200"
+
+                  >
+
+                    <Sparkles className="w-5 h-5" /> Genera Palette AI
+
+                  </button>
+
+                  <button onClick={() => setView('menu')} className="border-2 border-slate-200 hover:bg-slate-50 font-bold py-4 px-6 rounded-full text-sm">
+
+                    Torna al Menu
+
+                  </button>
+
+                </div>
+
+ 
+
+                {isAiLoading && (
+
+                  <div className="py-12 flex flex-col items-center justify-center space-y-4 border-t border-slate-100 animate-pulse">
+
+                    <div className="w-12 h-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
+
+                    <p className="text-slate-500 text-sm font-semibold flex items-center gap-1.5">
+
+                      <Sparkles className="w-4 h-4 text-indigo-500 animate-bounce" /> Elaborazione cromatico-psicologica in corso...
+
+                    </p>
+
+                  </div>
+
+                )}
+
+ 
+
+                {aiError && (
+
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 text-red-700 text-sm items-center">
+
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+
+                    <p className="font-semibold">{aiError}</p>
+
+                  </div>
+
+                )}
+
+ 
+
+                {aiResponse && (
+
+                  <div className="border-t border-slate-100 pt-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+                    <div className="bg-indigo-50 border border-indigo-100/60 p-4 rounded-2xl flex items-center justify-between">
+
+                      <div>
+
+                        <span className="text-xs uppercase tracking-widest font-extrabold text-indigo-500">Nome Palette Generata</span>
+
+                        <h3 className="text-xl font-black text-indigo-900 mt-0.5">{aiResponse.paletteName}</h3>
+
+                      </div>
+
+                      <Sparkles className="w-6 h-6 text-indigo-500" />
+
+                    </div>
+
+ 
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+
+                      {aiResponse.colors.map((color, index) => (
+
+                        <div key={index} className="bg-slate-50 border border-slate-100 rounded-3xl p-4 flex flex-col h-full shadow-sm">
+
+                          <div
+
+                            className="w-full h-24 rounded-2xl mb-3 shadow-inner relative group cursor-pointer transition-transform hover:scale-[1.02]"
+
+                            style={{ backgroundColor: color.hex }}
+
+                            onClick={() => copyToClipboard(color.hex, index)}
+
+                          >
+
+                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center text-white text-xs font-bold gap-1">
+
+                              {copiedIndex === index ? (
+
+                                <>
+
+                                  <Check className="w-4 h-4 text-green-400" /> Copiato!
+
+                                </>
+
+                              ) : (
+
+                                <>
+
+                                  <Copy className="w-4 h-4" /> Copia HEX
+
+                                </>
+
+                              )}
+
+                            </div>
+
+                          </div>
+
+                          <div className="flex-grow space-y-1">
+
+                            <h4 className="font-bold text-slate-800 text-sm flex items-center justify-between">
+
+                              <span>{color.name}</span>
+
+                              <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">
+
+                                {color.role}
+
+                              </span>
+
+                            </h4>
+
+                            <span className="text-xs font-mono font-semibold text-slate-500 block">{color.hex}</span>
+
+                            <p className="text-xs text-slate-600 leading-relaxed pt-1">{color.psychology}</p>
+
+                          </div>
+
+                        </div>
+
+                      ))}
+
+                    </div>
+
+ 
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-slate-100 pt-6">
+
+                      <div className="bg-amber-50/50 border border-amber-100 p-5 rounded-3xl space-y-2">
+
+                        <span className="text-xs uppercase font-extrabold text-amber-700 tracking-wider">Il Contrasto di Itten Consigliato</span>
+
+                        <p className="text-sm font-bold text-amber-900">{aiResponse.ittenContrast}</p>
+
+                      </div>
+
+ 
+
+                      <div className="bg-emerald-50/50 border border-emerald-100 p-5 rounded-3xl space-y-2">
+
+                        <span className="text-xs uppercase font-extrabold text-emerald-700 tracking-wider">Impatto Psicologico e Marketing</span>
+
+                        <p className="text-sm text-emerald-900 leading-relaxed">{aiResponse.marketingExplanation}</p>
+
+                      </div>
+
+ 
+
+                      <div className="bg-blue-50/50 border border-blue-100 p-5 rounded-3xl space-y-2">
+
+                        <span className="text-xs uppercase font-extrabold text-blue-700 tracking-wider">Regole UX/UI per lo Schermo</span>
+
+                        <p className="text-sm text-blue-900 leading-relaxed">{aiResponse.uxTip}</p>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                )}
+
+              </div>
+
+            </div>
+
+          )}
+
+ 
+
+          {/* --- SCHERMATA NUOVO LAB SEGNALETICA DI SICUREZZA --- */}
+
+          {view === 'safety-lab' && (
+
+            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+
+              <div className="bg-gradient-to-r from-red-700 via-orange-600 to-yellow-600 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+                <div>
+
+                  <span className="text-xs uppercase font-extrabold tracking-widest text-orange-200 flex items-center gap-1.5">
+
+                    <ShieldAlert className="w-4 h-4 text-yellow-300 animate-bounce" /> Sicurezza sul Lavoro & Codice della Strada
+
+                  </span>
+
+                  <h2 className="text-2xl font-bold mt-1">Laboratorio Segnaletica di Sicurezza AI ⚠️</h2>
+
+                  <p className="text-slate-105 text-sm mt-1">Progetta un cartello o segnale stradale normato tramite l'AI, scoprendo l'importanza cruciale dei contrasti ad alta visibilità (UNI EN ISO 7010).</p>
+
+                </div>
+
+                <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center">
+
+                  Materiale didattico Prof. Delfino REGA
+
+                </span>
+
+              </div>
+
+ 
+
+              <div className="p-6 sm:p-8 space-y-6">
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                  <div className="md:col-span-2 space-y-4">
+
+                    <label className="block text-sm font-bold text-slate-700">Contesto, Pericolo o Rischio</label>
+
+                    <textarea
+
+                      rows="3"
+
+                      className="w-full p-4 border-2 border-slate-200 rounded-2xl outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all text-sm"
+
+                      placeholder="Esempio: Alta tensione nei pressi di una cabina elettrica, oppure Uscita di emergenza a destra in caso di fumo, o Divieto di transito ai carrelli elevatori..."
+
+                      value={safetyScenario}
+
+                      onChange={e => setSafetyScenario(e.target.value)}
+
+                    />
+
+                  </div>
+
+                 
+
+                  <div className="space-y-4">
+
+                    <label className="block text-sm font-bold text-slate-700">Categoria UNI EN ISO 7010</label>
+
+                    <select
+
+                      className="w-full p-4 border-2 border-slate-200 bg-white rounded-2xl outline-none focus:border-red-500 transition-all text-sm font-semibold text-slate-700"
+
+                      value={safetyCategory}
+
+                      onChange={e => setSafetyCategory(e.target.value)}
+
+                    >
+
+                      <option value="Divieto">Divieto (Rosso / Cerchio)</option>
+
+                      <option value="Obbligo">Prescrizione / Obbligo (Blu / Cerchio)</option>
+
+                      <option value="Avvertimento">Avvertimento / Pericolo (Giallo / Triangolo)</option>
+
+                      <option value="Salvataggio e Soccorso">Salvataggio e Soccorso (Verde / Quadrato)</option>
+
+                      <option value="Antincendio">Attrezzatura Antincendio (Rosso / Quadrato)</option>
+
+                      <option value="Segnale Stradale">Segnaletica Stradale di Prescrizione / Pericolo</option>
+
+                    </select>
+
+                  </div>
+
+                </div>
+
+ 
+
+                <div className="flex gap-4">
+
+                  <button
+
+                    onClick={handleGenerateSafetySign}
+
+                    disabled={isSafetyLoading || !safetyScenario.trim()}
+
+                    className="bg-red-600 hover:bg-red-700 disabled:bg-slate-300 disabled:scale-100 text-white font-bold py-4 px-8 rounded-full text-base transition-all hover:scale-105 active:scale-95 flex items-center gap-2 shadow-lg shadow-red-200"
+
+                  >
+
+                    <Construction className="w-5 h-5" /> Costruisci Segnale con AI
+
+                  </button>
+
+                  <button onClick={() => setView('menu')} className="border-2 border-slate-200 hover:bg-slate-50 font-bold py-4 px-6 rounded-full text-sm">
+
+                    Torna al Menu
+
+                  </button>
+
+                </div>
+
+ 
+
+                {/* Loader */}
+
+                {isSafetyLoading && (
+
+                  <div className="py-12 flex flex-col items-center justify-center space-y-4 border-t border-slate-100 animate-pulse">
+
+                    <div className="w-12 h-12 rounded-full border-4 border-red-600 border-t-transparent animate-spin"></div>
+
+                    <p className="text-slate-500 text-sm font-semibold flex items-center gap-1.5 animate-bounce">
+
+                      <Construction className="w-4 h-4 text-red-500" /> Assemblaggio grafico del segnale in corso...
+
+                    </p>
+
+                  </div>
+
+                )}
+
+ 
+
+                {/* Errore */}
+
+                {safetyError && (
+
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 text-red-700 text-sm items-center">
+
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+
+                    <p className="font-semibold">{safetyError}</p>
+
+                  </div>
+
+                )}
+
+ 
+
+                {/* Risultato Segnale Generato */}
+
+                {safetyResponse && (
+
+                  <div className="border-t border-slate-100 pt-8 grid grid-cols-1 md:grid-cols-12 gap-8 items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+                   
+
+                    {/* Rendering Vettoriale Dinamico del Segnale Generato dall'AI */}
+
+                    <div className="md:col-span-4 flex flex-col items-center justify-center p-6 bg-slate-100 rounded-3xl border border-slate-200/50">
+
+                      <span className="text-xs uppercase font-extrabold text-slate-400 tracking-wider mb-4">Segnale Assemblato</span>
+
+                     
+
+                      <div className="w-48 h-48 flex items-center justify-center relative">
+
+                        <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-lg">
+
+                          {/* 1. Forma: Triangolo */}
+
+                          {safetyResponse.shape === 'triangle' && (
+
+                            <polygon
+
+                              points="50,5 95,85 5,85"
+
+                              fill={safetyResponse.bgColor}
+
+                              stroke={safetyResponse.borderColor}
+
+                              strokeWidth="5"
+
+                            />
+
+                          )}
+
+ 
+
+                          {/* 2. Forma: Cerchio */}
+
+                          {safetyResponse.shape === 'circle' && (
+
+                            <circle
+
+                              cx="50" cy="50" r="45"
+
+                              fill={safetyResponse.bgColor}
+
+                              stroke={safetyResponse.borderColor}
+
+                              strokeWidth="5"
+
+                            />
+
+                          )}
+
+ 
+
+                          {/* 3. Forma: Quadrato */}
+
+                          {safetyResponse.shape === 'square' && (
+
+                            <rect
+
+                              x="5" y="5" width="90" height="90" rx="10"
+
+                              fill={safetyResponse.bgColor}
+
+                              stroke={safetyResponse.borderColor}
+
+                              strokeWidth="5"
+
+                            />
+
+                          )}
+
+ 
+
+                          {/* 4. Forma: Rettangolo */}
+
+                          {safetyResponse.shape === 'rectangle' && (
+
+                            <rect
+
+                              x="5" y="15" width="90" height="70" rx="8"
+
+                              fill={safetyResponse.bgColor}
+
+                              stroke={safetyResponse.borderColor}
+
+                              strokeWidth="5"
+
+                            />
+
+                          )}
+
+ 
+
+                          {/* SVG Path dell'icona (pittogramma) centrale */}
+
+                          <path
+
+                            d={safetyResponse.symbolPath}
+
+                            fill={safetyResponse.textColor}
+
+                            transform="translate(25, 25) scale(0.5)"
+
+                          />
+
+ 
+
+                          {/* Barra rossa trasversale per divieti (solo se cerchio e categoria Divieto) */}
+
+                          {safetyResponse.shape === 'circle' && safetyCategory === 'Divieto' && (
+
+                            <line x1="18" y1="18" x2="82" y2="82" stroke={safetyResponse.borderColor} strokeWidth="6" />
+
+                          )}
+
+                        </svg>
+
+                      </div>
+
+ 
+
+                      <p className="text-xs text-slate-500 text-center font-semibold mt-4 bg-slate-200 px-3 py-1 rounded-full">
+
+                        Icona: {safetyResponse.symbolDescription}
+
+                      </p>
+
+                    </div>
+
+ 
+
+                    {/* Descrizione Tecnica e Comportamentale */}
+
+                    <div className="md:col-span-8 space-y-4">
+
+                      <div>
+
+                        <span className="text-xs uppercase font-extrabold text-red-600 tracking-wider bg-red-50 px-2.5 py-1 rounded-full border border-red-100">
+
+                          {safetyResponse.regulatoryCategory}
+
+                        </span>
+
+                        <h3 className="text-2xl font-black text-slate-800 mt-2">{safetyResponse.signTitle}</h3>
+
+                      </div>
+
+ 
+
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/50 space-y-2">
+
+                        <h4 className="text-sm font-extrabold text-slate-700 flex items-center gap-1.5">
+
+                          <Eye className="w-4 h-4 text-indigo-600" /> Prescrizione Comportamentale
+
+                        </h4>
+
+                        <p className="text-sm text-slate-600 leading-relaxed font-semibold">
+
+                          {safetyResponse.behavioralRule}
+
+                        </p>
+
+                      </div>
+
+ 
+
+                      <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100/60 space-y-2">
+
+                        <h4 className="text-sm font-extrabold text-indigo-900 flex items-center gap-1.5">
+
+                          <Palette className="w-4 h-4 text-indigo-600" /> Analisi Cromatica & Standard Tecnici
+
+                        </h4>
+
+                        <p className="text-sm text-indigo-950 leading-relaxed font-medium whitespace-pre-line">
+
+                          {safetyResponse.technicalStandards}
+
+                        </p>
+
+                      </div>
+
+                    </div>
+
+ 
+
+                  </div>
+
+                )}
+
+              </div>
+
+            </div>
+
+          )}
+
+         
+
+          {view === 'playing' && (
+
+            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+
+              {/* Titolo e descrizione del livello */}
+
+              <div className="bg-slate-800 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+                <div>
+
+                  <span className="text-xs uppercase font-extrabold tracking-widest text-indigo-300">Scienza del Colore, Design & Marketing</span>
+
+                  <h2 className="text-2xl font-bold mt-1 mb-2">{LEVELS_DATA[level].title}</h2>
+
+                  <p className="text-slate-300 text-base">{LEVELS_DATA[level].desc}</p>
+
+                </div>
+
+                <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center">
+
+                  Materiale didattico Prof. Delfino REGA
+
+                </span>
+
+              </div>
+
+ 
+
+              <div className="p-4 sm:p-8 relative min-h-[460px] flex flex-col justify-center">
+
+                {/* Feedback Overlay */}
+
+                {feedback && (
+
+                  <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in duration-300">
+
+                    {feedback.isCorrect ? (
+
+                      <CheckCircle className="w-20 h-20 text-green-500 mb-4" />
+
+                    ) : (
+
+                      <XCircle className="w-20 h-20 text-red-500 mb-4" />
+
+                    )}
+
+                    <h3 className={`text-2xl font-bold text-center mb-2 ${feedback.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+
+                      {feedback.isCorrect ? 'Risposta Esatta!' : 'Riprova!'}
+
+                    </h3>
+
+                    <p className="text-base sm:text-lg text-slate-600 text-center max-w-lg font-medium leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
+
+                      {feedback.message}
+
+                    </p>
+
+                  </div>
+
+                )}
+
+ 
+
+                {/* Sezione di Gioco Attiva */}
+
+                <div className="w-full">
+
+                  {LEVELS_DATA[level].type === 'interactive-primaries' && <InteractivePrimaries showFeedback={showFeedback} />}
+
+                  {LEVELS_DATA[level].type === 'interactive-mix' && <InteractiveMix showFeedback={showFeedback} levelData={LEVELS_DATA[level]} />}
+
+                  {LEVELS_DATA[level].type === 'interactive-complementary' && <InteractiveComplementary showFeedback={showFeedback} levelData={LEVELS_DATA[level]} />}
+
+                  {LEVELS_DATA[level].type === 'interactive-light' && <InteractiveLight showFeedback={showFeedback} />}
+
+                  {LEVELS_DATA[level].type === 'quiz' && <QuizLevel showFeedback={showFeedback} levelData={LEVELS_DATA[level]} />}
+
+                </div>
+
+              </div>
+
+            </div>
+
+          )}
+
+ 
+
+          {view === 'end' && <EndScreen score={score} total={LEVELS_DATA.length * 100} onHome={() => setView('menu')} />}
+
+        </main>
+
+      </div>
+
+ 
+
+      {/* FOOTER GLOBALE FISSO */}
+
+      <footer className="text-center py-6 text-xs text-slate-400 font-extrabold border-t border-slate-200 bg-white mt-12 w-full">
+
+        <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+
+          <p>© 2026 L'Atelier di Itten — Tutti i diritti riservati.</p>
+
+          <p className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded border border-indigo-100 tracking-wider">
+
+            MATERIALE DIDATTICO PROF. DELFINO REGA
+
+          </p>
+
+        </div>
+
+      </footer>
+
+    </div>
+
+  );
+
+}
+
+ 
+
+/* --- RE-INTRODUZIONE DEL COMPONENTE REGISTRATIONSCREEN --- */
+
+function RegistrationScreen({ onRegister }) {
+
+  const [val, setVal] = useState('');
+
+  return (
+
+    <div className="bg-white p-8 rounded-3xl shadow-lg max-w-md mx-auto text-center mt-12 border border-slate-100 space-y-4">
+
+      <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2">
+
+        <User className="w-8 h-8 text-indigo-600" />
+
+      </div>
+
+      <h2 className="text-2xl font-bold text-slate-800">Crea il tuo profilo</h2>
+
+      <p className="text-slate-500 text-sm leading-relaxed">
+
+        Inserisci un nickname per registrare il tuo punteggio nell'Atelier e accedere a tutti i laboratori interattivi d'arte e sicurezza.
+
+      </p>
+
+     
+
+      <div className="text-center py-1">
+
+        <span className="text-[10px] bg-indigo-50 text-indigo-750 px-2.5 py-1 rounded font-bold uppercase tracking-wider inline-block">
+
+          Materiale didattico Prof. Delfino REGA
+
+        </span>
+
+      </div>
+
+ 
+
+      <form onSubmit={(e) => onRegister(e, val)} className="space-y-4 pt-2">
+
+        <input
+
+          type="text"
+
+          maxLength="15"
+
+          required
+
+          placeholder="Il tuo Nickname"
+
+          className="w-full p-4 border-2 border-slate-200 rounded-xl text-lg text-center focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none transition-all"
+
+          value={val}
+
+          onChange={e => setVal(e.target.value)}
+
+        />
+
+        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl text-lg transition-transform active:scale-95 shadow-md shadow-indigo-100">
+
+          Accedi e Gioca
+
+        </button>
+
+      </form>
+
+    </div>
+
+  );
+
+}
+
+ 
+
+/* --- COMPONENTE: MENUSCREEN COMPLETO --- */
+
+function MenuScreen({ onStart, onLeaderboard, onAiLab, onSafetyLab, onChatLab, onEmojiLab, onPuzzleLab }) {
+
+  return (
+
+    <div className="max-w-3xl mx-auto mt-8">
+
+      <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-100 relative overflow-hidden">
+
+        {/* Decorazioni cromatiche di sfondo */}
+
+        <div className="absolute top-0 left-0 w-32 h-32 bg-red-400 rounded-br-full opacity-10"></div>
+
+        <div className="absolute bottom-0 right-0 w-40 h-40 bg-blue-400 rounded-tl-full opacity-10"></div>
+
+       
+
+        <div className="relative z-10 text-center">
+
+          <Palette className="w-20 h-20 mx-auto text-indigo-600 mb-6" />
+
+          <h2 className="text-4xl font-extrabold mb-2 text-slate-800">L'Atelier di Itten</h2>
+
+          <span className="text-xs uppercase tracking-widest font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100 inline-block">
+
+            Materiale didattico Prof. Delfino REGA
+
+          </span>
+
+        </div>
+
+ 
+
+        {/* --- BOX MESSAGGIO DEL PROFESSOR DELFINO REGA --- */}
+
+        <div className="mt-8 mb-6 p-6 bg-gradient-to-r from-slate-50 to-indigo-50/30 rounded-2xl border-2 border-indigo-100 relative z-10 shadow-sm">
+
+          <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+
+            <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white font-black text-xl shadow-md border-2 border-white flex-shrink-0">
+
+              DR
+
+            </div>
+
+            <div className="text-center sm:text-left">
+
+              <h4 className="font-bold text-slate-800 text-lg flex items-center justify-center sm:justify-start gap-2">
+
+                Prof. Delfino REGA
+
+                <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full font-semibold">Docente</span>
+
+              </h4>
+
+              <p className="text-slate-600 mt-2 text-sm italic leading-relaxed">
+
+                "Benvenuti all'Atelier di Itten! Ho appositamente progettato questa piattaforma didattica per accompagnarvi alla scoperta della <strong>scienza ottica</strong>, dell'<strong>armonia di Itten</strong> e della <strong>psicologia cromatica nel marketing moderno</strong>. Mettetevi alla prova con queste 15 sfide interattive, studiate le regole e l'impatto culturale del colore e cercate di conquistare la vetta della classifica globale dei nostri allievi. Buon viaggio e buono studio!"
+
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+ 
+
+        {/* Pulsanti Principali - Disposti su Griglia Responsive */}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10">
+
+          <button onClick={onStart} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-2xl text-base transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3 shadow-lg shadow-indigo-200">
+
+            <Play className="w-5 h-5 fill-current" /> Inizia Percorso (15 Quiz)
+
+          </button>
+
+ 
+
+          <button onClick={onPuzzleLab} className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold py-4 px-6 rounded-2xl text-base transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-amber-200">
+
+            <Palette className="w-5 h-5" /> 🧩 Puzzle Cerchio Cromatico
+
+          </button>
+
+ 
+
+          <button onClick={onEmojiLab} className="bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold py-4 px-6 rounded-2xl text-base transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-pink-200">
+
+            <Smile className="w-5 h-5" /> 🎨 Lab Disegno Emoji AI
+
+          </button>
+
+         
+
+          <button onClick={onSafetyLab} className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-white font-bold py-4 px-6 rounded-2xl text-base transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-red-200">
+
+            <ShieldAlert className="w-5 h-5" /> ⚠️ Lab Segnaletica AI
+
+          </button>
+
+ 
+
+          <button onClick={onAiLab} className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-4 px-6 rounded-2xl text-base transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-purple-200">
+
+            <Sparkles className="w-5 h-5" /> ✨ Lab Brand AI ✨
+
+          </button>
+
+ 
+
+          <button onClick={onChatLab} className="bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-700 hover:to-indigo-600 text-white font-bold py-4 px-6 rounded-2xl text-base transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-blue-200 col-span-1 sm:col-span-2">
+
+            <MessageSquare className="w-5 h-5" /> 💬 Tutor Chat Personale AI
+
+          </button>
+
+ 
+
+          <button onClick={onLeaderboard} className="bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-4 px-6 rounded-2xl text-base transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3 col-span-1 sm:col-span-2">
+
+            <Trophy className="w-5 h-5 text-yellow-500" /> Classifica Generale
+
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+ 
+
+/* --- NUOVO COMPONENTE: EMOJIDRAWINGLAB COMPLETO --- */
+
+function EmojiDrawingLab({ isLoading, error, response, onAnalyze, onBack }) {
+
+  const canvasRef = useRef(null);
+
+  const [isDrawing, setIsDrawing] = useState(false);
+
+  const [brushColor, setBrushColor] = useState('#EAB308');
+
+  const [brushSize, setBrushSize] = useState(6);
+
+  const [isEraser, setIsEraser] = useState(false);
+
+ 
+
+  useEffect(() => {
+
+    const canvas = canvasRef.current;
+
+    if (canvas) {
+
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#FFFFFF';
+
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    }
+
+  }, []);
+
+ 
+
+  const getCoordinates = (e) => {
+
+    const canvas = canvasRef.current;
+
+    const rect = canvas.getBoundingClientRect();
+
+    if (e.touches && e.touches[0]) {
+
+      return {
+
+        x: e.touches[0].clientX - rect.left,
+
+        y: e.touches[0].clientY - rect.top
+
+      };
+
+    }
+
+    return {
+
+      x: e.clientX - rect.left,
+
+      y: e.clientY - rect.top
+
+    };
+
+  };
+
+ 
+
+  const startDrawing = (e) => {
+
+    e.preventDefault();
+
+    const { x, y } = getCoordinates(e);
+
+    const ctx = canvasRef.current.getContext('2d');
+
+    ctx.beginPath();
+
+    ctx.moveTo(x, y);
+
+    ctx.lineWidth = brushSize;
+
+    ctx.lineCap = 'round';
+
+    ctx.lineJoin = 'round';
+
+    ctx.strokeStyle = isEraser ? '#FFFFFF' : brushColor;
+
+    setIsDrawing(true);
+
+  };
+
+ 
+
+  const draw = (e) => {
+
+    if (!isDrawing) return;
+
+    e.preventDefault();
+
+    const { x, y } = getCoordinates(e);
+
+    const ctx = canvasRef.current.getContext('2d');
+
+    ctx.lineTo(x, y);
+
+    ctx.stroke();
+
+  };
+
+ 
+
+  const stopDrawing = () => {
+
+    setIsDrawing(false);
+
+  };
+
+ 
+
+  const clearCanvas = () => {
+
+    const canvas = canvasRef.current;
+
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#FFFFFF';
+
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  };
+
+ 
+
+  const handleSubmit = () => {
+
+    const canvas = canvasRef.current;
+
+    const base64Png = canvas.toDataURL('image/png').split(',')[1];
+
+    onAnalyze(base64Png);
+
+  };
+
+ 
+
+  const paletteBrushes = [
+
+    { hex: '#EF4444', emotion: 'Rabbia / Passione' },
+
+    { hex: '#EAB308', emotion: 'Gioia / Energia' },
+
+    { hex: '#3B82F6', emotion: 'Tristezza / Calma' },
+
+    { hex: '#22C55E', emotion: 'Equilibrio / Crescita' },
+
+    { hex: '#F97316', emotion: 'Entusiasmo / Creatività' },
+
+    { hex: '#A855F7', emotion: 'Mistero / Regalità' },
+
+    { hex: '#000000', emotion: 'Autorità / Tratto forte' },
+
+  ];
+
+ 
+
+  return (
+
+    <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+
+      <div className="bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+        <div>
+
+          <span className="text-xs uppercase font-extrabold tracking-widest text-pink-100 flex items-center gap-1.5">
+
+            <Smile className="w-4 h-4 text-yellow-300" /> Gioco Didattico Interattivo
+
+          </span>
+
+          <h2 className="text-2xl font-bold mt-1">Laboratorio Disegno Emoji AI 🎨</h2>
+
+          <p className="text-slate-100 text-sm mt-1">Disegna a mano libera un'espressione o uno stato d'animo sulla lavagna a sinistra. L'AI interpreterà i tuoi tratti cromatici e darà vita di lato ad un'emoji digitale con l'analisi di Itten!</p>
+
+        </div>
+
+        <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center self-center sm:self-start">
+
+          Materiale didattico Prof. Delfino REGA
+
+        </span>
+
+      </div>
+
+ 
+
+      <div className="p-6 sm:p-8 space-y-6">
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+
+         
+
+          {/* AREA DI DISEGNO (SINISTRA) */}
+
+          <div className="md:col-span-6 flex flex-col items-center">
+
+            <span className="text-sm font-bold text-slate-500 mb-3 uppercase tracking-wider">La tua Lavagna</span>
+
+           
+
+            <div className="border-4 border-slate-200 rounded-3xl overflow-hidden shadow-inner bg-white relative">
+
+              <canvas
+
+                ref={canvasRef}
+
+                width={320}
+
+                height={320}
+
+                onMouseDown={startDrawing}
+
+                onMouseMove={draw}
+
+                onMouseUp={stopDrawing}
+
+                onMouseLeave={stopDrawing}
+
+                onTouchStart={startDrawing}
+
+                onTouchMove={draw}
+
+                onTouchEnd={stopDrawing}
+
+                className="cursor-crosshair touch-none"
+
+              />
+
+            </div>
+
+ 
+
+            <div className="w-full mt-4 space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-150">
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+
+                <span className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">Colore dell'Emozione:</span>
+
+                <div className="flex gap-1.5 flex-wrap">
+
+                  {paletteBrushes.map((brush) => (
+
+                    <button
+
+                      key={brush.hex}
+
+                      onClick={() => { setBrushColor(brush.hex); setIsEraser(false); }}
+
+                      className={`w-8 h-8 rounded-full border-2 transition-all ${brushColor === brush.hex && !isEraser ? 'scale-115 ring-2 ring-indigo-400 border-white' : 'border-slate-300 hover:scale-105'}`}
+
+                      style={{ backgroundColor: brush.hex }}
+
+                      title={brush.emotion}
+
+                    />
+
+                  ))}
+
+                  <button
+
+                    onClick={() => setIsEraser(true)}
+
+                    className={`p-1.5 rounded-full border-2 transition-all ${isEraser ? 'bg-indigo-600 text-white border-white scale-110' : 'bg-white text-slate-500 border-slate-300 hover:scale-105'}`}
+
+                    title="Gomma per cancellare"
+
+                  >
+
+                    <Eraser className="w-4 h-4" />
+
+                  </button>
+
+                </div>
+
+              </div>
+
+ 
+
+              <div className="flex items-center justify-between gap-4 pt-1">
+
+                <span className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">Spessore:</span>
+
+                <div className="flex-grow flex items-center gap-2">
+
+                  <Brush className="w-3.5 h-3.5 text-slate-400" />
+
+                  <input
+
+                    type="range"
+
+                    min="3" max="18"
+
+                    value={brushSize}
+
+                    onChange={(e) => setBrushSize(parseInt(e.target.value))}
+
+                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+
+                  />
+
+                  <span className="text-xs font-bold text-slate-500 w-5">{brushSize}px</span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+ 
+
+            <div className="flex gap-3 w-full mt-4">
+
+              <button
+
+                onClick={handleSubmit}
+
+                disabled={isLoading}
+
+                className="flex-grow bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:scale-100 text-white font-bold py-3.5 px-6 rounded-2xl text-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-md shadow-indigo-150"
+
+              >
+
+                <Sparkles className="w-4 h-4" /> Analizza & Trasforma con AI ✨
+
+              </button>
+
+              <button
+
+                onClick={clearCanvas}
+
+                className="p-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all active:scale-95 border border-slate-200"
+
+                title="Svuota lavagna"
+
+              >
+
+                <Trash2 className="w-4.5 h-4.5" />
+
+              </button>
+
+            </div>
+
+          </div>
+
+ 
+
+          {/* RISULTATO E RENDERING VETTORIALE (DESTRA) */}
+
+          <div className="md:col-span-6 space-y-6">
+
+            <span className="text-sm font-bold text-slate-500 block uppercase tracking-wider text-center md:text-left">La tua Creazione AI</span>
+
+ 
+
+            {isLoading && (
+
+              <div className="p-8 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 min-h-[340px] flex flex-col items-center justify-center space-y-4 animate-pulse">
+
+                <div className="w-12 h-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
+
+                <p className="text-slate-500 text-sm font-semibold flex items-center gap-1.5 text-center px-4">
+
+                  <Sparkles className="w-4 h-4 text-indigo-500 animate-bounce" /> Johannes Itten sta interpretando il tuo disegno vettoriale...
+
+                </p>
+
+              </div>
+
+            )}
+
+ 
+
+            {error && (
+
+              <div className="p-4 bg-red-50 border border-red-150 rounded-2xl flex gap-3 text-red-700 text-xs items-center">
+
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+
+                <p className="font-semibold">{error}</p>
+
+              </div>
+
+            )}
+
+ 
+
+            {!isLoading && !response && !error && (
+
+              <div className="p-8 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 min-h-[340px] flex flex-col items-center justify-center text-center text-slate-400 space-y-3">
+
+                <Smile className="w-16 h-16 opacity-30 stroke-[1.5]" />
+
+                <p className="text-sm font-medium leading-relaxed max-w-xs">
+
+                  Il disegno comparirà qui in versione vettoriale e digitale dopo che avrai disegnato a sinistra e cliccato sul pulsante!
+
+                </p>
+
+              </div>
+
+            )}
+
+ 
+
+            {response && (
+
+              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500">
+
+                <div className="p-6 bg-slate-100 rounded-3xl border border-slate-200/50 flex flex-col items-center">
+
+                  <div
+
+                    className="w-36 h-36 drop-shadow-xl flex items-center justify-center"
+
+                    dangerouslySetInnerHTML={{ __html: response.svgOutput }}
+
+                  />
+
+                  <h3 className="text-lg font-black text-indigo-950 mt-4 text-center">
+
+                    {response.emojiName}
+
+                  </h3>
+
+                </div>
+
+ 
+
+                <div className="p-4 bg-rose-50/60 border border-rose-100 rounded-2xl space-y-1.5">
+
+                  <h4 className="text-xs uppercase font-extrabold text-rose-700 tracking-wider flex items-center gap-1">
+
+                    <Smile className="w-3.5 h-3.5" /> Analisi Psicologica Visiva
+
+                  </h4>
+
+                  <p className="text-xs text-rose-950 leading-relaxed font-medium">
+
+                    {response.psychologicalProfile}
+
+                  </p>
+
+                </div>
+
+ 
+
+                <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl space-y-1.5">
+
+                  <h4 className="text-xs uppercase font-extrabold text-indigo-700 tracking-wider">
+
+                    Colori Rilevati dall'AI
+
+                  </h4>
+
+                  <ul className="text-xs text-indigo-900 font-medium space-y-1 list-disc pl-4">
+
+                    {response.detectedColors.map((colorStr, i) => (
+
+                      <li key={i}>{colorStr}</li>
+
+                    ))}
+
+                  </ul>
+
+                </div>
+
+ 
+
+                <div className="p-4 bg-amber-50/60 border border-amber-100 rounded-2xl space-y-1.5">
+
+                  <h4 className="text-xs uppercase font-extrabold text-amber-700 tracking-wider flex items-center gap-1">
+
+                    <Palette className="w-3.5 h-3.5" /> Contrasti di Itten Applicati
+
+                  </h4>
+
+                  <p className="text-xs text-amber-950 leading-relaxed font-medium">
+
+                    {response.ittenAnalysis}
+
+                  </p>
+
+                </div>
+
+              </div>
+
+            )}
+
+          </div>
+
+        </div>
+
+ 
+
+        <div className="flex justify-end pt-4 border-t border-slate-100">
+
+          <button onClick={onBack} className="border-2 border-slate-200 hover:bg-slate-50 font-bold py-3 px-6 rounded-2xl text-xs transition-colors">
+
+            Torna al Menu Principale
+
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+ 
+
+/* --- NUOVO COMPONENTE: LABORATORIO PUZZLE DRAG & DROP --- */
+
+function IttenPuzzleLab({ onBack, onVictory }) {
+
+  const PUZZLE_COLORS = [
+
+    { id: 0, name: "Giallo", hex: "#FFFF00", desc: "Colore primario luminoso, associato alla luce pura e all'energia solare." },
+
+    { id: 1, name: "Giallo-Arancio", hex: "#FFAA00", desc: "Colore terziario che unisce la radiosità del giallo e l'ottimismo dell'arancio." },
+
+    { id: 2, name: "Arancio", hex: "#FF7700", desc: "Colore secondario vivace, stimolante, sinonimo di entusiasmo e calore." },
+
+    { id: 3, name: "Rosso-Arancio", hex: "#FF3300", desc: "Colore terziario saturo, carico di energia termica ed espressività." },
+
+    { id: 4, name: "Rosso", hex: "#FF0000", desc: "Colore primario di eccezionale forza visiva, evoca passione e urgenza." },
+
+    { id: 5, name: "Rosso-Viola", hex: "#CC0066", desc: "Colore terziario che unisce la passionalità del rosso con il mistero del viola." },
+
+    { id: 6, name: "Viola", hex: "#7700AA", desc: "Colore secondario profondo, legato storicamente alla regalità e alla spiritualità." },
+
+    { id: 7, name: "Blu-Viola", hex: "#333399", desc: "Colore terziario scuro e notturno, bilancia freddezza e profondità." },
+
+    { id: 8, name: "Blu", hex: "#0000FF", desc: "Colore primario freddo per eccellenza, evoca pace, fiducia e stabilità." },
+
+    { id: 9, name: "Blu-Verde", hex: "#006666", desc: "Colore terziario raffinato, ricorda gli abissi oceanici e la quiete." },
+
+    { id: 10, name: "Verde", hex: "#009933", desc: "Colore secondario equilibrato e fresco, simbolo della natura e della rigenerazione." },
+
+    { id: 11, name: "Giallo-Verde", hex: "#99CC00", desc: "Colore terziario primaverile, infonde freschezza e dinamismo naturale." }
+
+  ];
+
+ 
+
+  const [placed, setPlaced] = useState(Array(12).fill(null));
+
+  const [tray, setTray] = useState([]);
+
+  const [selectedTrayId, setSelectedTrayId] = useState(null);
+
+  const [activeHint, setActiveHint] = useState(null);
+
+  const [hasWon, setHasWon] = useState(false);
+
+ 
+
+  useEffect(() => {
+
+    resetGame();
+
+  }, []);
+
+ 
+
+  const resetGame = () => {
+
+    setPlaced(Array(12).fill(null));
+
+    setSelectedTrayId(null);
+
+    setActiveHint(null);
+
+    setHasWon(false);
+
+   
+
+    const scrambled = [...PUZZLE_COLORS];
+
+    for (let i = scrambled.length - 1; i > 0; i--) {
+
+      const j = Math.floor(Math.random() * (i + 1));
+
+      [scrambled[i], scrambled[j]] = [scrambled[j], scrambled[i]];
+
+    }
+
+    setTray(scrambled);
+
+  };
+
+ 
+
+  const makeWedgePath = (index) => {
+
+    const cx = 125;
+
+    const cy = 125;
+
+    const r_o = 110;
+
+    const r_i = 75; 
+
+ 
+
+    const centerAngle = -Math.PI / 2 + index * (Math.PI / 6);
+
+    const startAngle = centerAngle - Math.PI / 12;
+
+    const endAngle = centerAngle + Math.PI / 12;
+
+ 
+
+    const x_o1 = cx + r_o * Math.cos(startAngle);
+
+    const y_o1 = cy + r_o * Math.sin(startAngle);
+
+    const x_o2 = cx + r_o * Math.cos(endAngle);
+
+    const y_o2 = cy + r_o * Math.sin(endAngle);
+
+ 
+
+    const x_i1 = cx + r_i * Math.cos(startAngle);
+
+    const y_i1 = cy + r_i * Math.sin(startAngle);
+
+    const x_i2 = cx + r_i * Math.cos(endAngle);
+
+    const y_i2 = cy + r_i * Math.sin(endAngle);
+
+ 
+
+    return `M ${x_o1} ${y_o1} A ${r_o} ${r_o} 0 0 1 ${x_o2} ${y_o2} L ${x_i2} ${y_i2} A ${r_i} ${r_i} 0 0 0 ${x_i1} ${y_i1} Z`;
+
+  };
+
+ 
+
+  const handleDragStart = (e, colorId) => {
+
+    e.dataTransfer.setData("text/plain", colorId.toString());
+
+  };
+
+ 
+
+  const handleDrop = (e, slotIndex) => {
+
+    e.preventDefault();
+
+    const draggedId = parseInt(e.dataTransfer.getData("text/plain"));
+
+    attemptPlace(draggedId, slotIndex);
+
+  };
+
+ 
+
+  const attemptPlace = (colorId, slotIndex) => {
+
+    if (colorId === slotIndex) {
+
+      const updatedPlaced = [...placed];
+
+      updatedPlaced[slotIndex] = PUZZLE_COLORS[colorId];
+
+      setPlaced(updatedPlaced);
+
+ 
+
+      setTray(prev => prev.filter(item => item.id !== colorId));
+
+      setSelectedTrayId(null);
+
+      setActiveHint(PUZZLE_COLORS[colorId]);
+
+ 
+
+      const win = updatedPlaced.every((item, idx) => item !== null && item.id === idx);
+
+      if (win) {
+
+        setHasWon(true);
+
+        onVictory(200);
+
+      }
+
+    } else {
+
+      setSelectedTrayId(null);
+
+      setActiveHint({ error: true, name: "Combinazione non corretta", desc: `La tonalità non corrisponde a questa posizione nel cerchio cromatico.` });
+
+      setTimeout(() => setActiveHint(null), 3000);
+
+    }
+
+  };
+
+ 
+
+  const handleTrayClick = (colorId) => {
+
+    setSelectedTrayId(colorId);
+
+    setActiveHint(PUZZLE_COLORS[colorId]);
+
+  };
+
+ 
+
+  const handleSlotClick = (slotIndex) => {
+
+    if (placed[slotIndex]) {
+
+      setActiveHint(placed[slotIndex]);
+
+      return;
+
+    }
+
+    if (selectedTrayId !== null) {
+
+      attemptPlace(selectedTrayId, slotIndex);
+
+    }
+
+  };
+
+ 
+
+  return (
+
+    <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+
+      <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+        <div>
+
+          <span className="text-xs uppercase font-extrabold tracking-widest text-yellow-100 flex items-center gap-1.5">
+
+            <Palette className="w-4 h-4 text-yellow-200" /> Laboratorio Didattico Pratico
+
+          </span>
+
+          <h2 className="text-2xl font-bold mt-1">Itten Color Puzzle 🧩</h2>
+
+          <p className="text-slate-100 text-sm mt-1">Trascina le tinte dal vassoio o tocca prima il colore e poi lo spicchio vuoto per completare l'anello esterno di Itten!</p>
+
+        </div>
+
+        <span className="text-[10px] bg-white/20 text-white px-2.5 py-1 rounded font-bold uppercase tracking-wider shrink-0 text-center self-center sm:self-start">
+
+          Materiale didattico Prof. Delfino REGA
+
+        </span>
+
+      </div>
+
+ 
+
+      <div className="p-6 sm:p-8 space-y-8">
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+
+         
+
+          <div className="md:col-span-7 flex flex-col items-center justify-center">
+
+            <div className="relative w-full max-w-sm aspect-square bg-slate-50 border border-slate-100 p-4 rounded-3xl flex items-center justify-center shadow-inner">
+
+             
+
+              <svg viewBox="0 0 250 250" className="w-full h-full drop-shadow-md">
+
+                <g>
+
+                  <polygon points="125,50 189.95,162.5 189.95,87.5" fill="#F97316" stroke="#FFFFFF" strokeWidth="1" />
+
+                  <polygon points="125,50 60.05,162.5 60.05,87.5" fill="#22C55E" stroke="#FFFFFF" strokeWidth="1" />
+
+                  <polygon points="60.05,162.5 189.95,162.5 125,200" fill="#A855F7" stroke="#FFFFFF" strokeWidth="1" />
+
+ 
+
+                  <polygon points="125,125 92.53,106.25 125,50 157.48,106.25" fill="#EAB308" stroke="#FFFFFF" strokeWidth="1" />
+
+                  <polygon points="125,125 125,162.5 60.05,162.5 92.53,106.25" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1" />
+
+                  <polygon points="125,125 157.48,106.25 189.95,162.5 125,162.5" fill="#EF4444" stroke="#FFFFFF" strokeWidth="1" />
+
+                </g>
+
+ 
+
+                <g>
+
+                  {Array.from({ length: 12 }).map((_, idx) => {
+
+                    const isCorrectlyPlaced = placed[idx] !== null;
+
+                    return (
+
+                      <path
+
+                        key={idx}
+
+                        d={makeWedgePath(idx)}
+
+                        fill={isCorrectlyPlaced ? placed[idx].hex : '#E2E8F0'}
+
+                        stroke={isCorrectlyPlaced ? '#FFFFFF' : '#CBD5E1'}
+
+                        strokeWidth="1.5"
+
+                        strokeDasharray={isCorrectlyPlaced ? '0' : '4 2'}
+
+                        className={`transition-all duration-300 cursor-pointer ${isCorrectlyPlaced ? 'hover:scale-105' : 'hover:fill-slate-200'}`}
+
+                        onDragOver={(e) => e.preventDefault()}
+
+                        onDrop={(e) => handleDrop(e, idx)}
+
+                        onClick={() => handleSlotClick(idx)}
+
+                      />
+
+                    );
+
+                  })}
+
+                </g>
+
+ 
+
+                <text x="125" y="44" fill="#64748B" fontSize="8" fontWeight="bold" textAnchor="middle">12</text>
+
+                <text x="210" y="130" fill="#64748B" fontSize="8" fontWeight="bold" textAnchor="middle">3</text>
+
+                <text x="125" y="215" fill="#64748B" fontSize="8" fontWeight="bold" textAnchor="middle">6</text>
+
+                <text x="40" y="130" fill="#64748B" fontSize="8" fontWeight="bold" textAnchor="middle">9</text>
+
+              </svg>
+
+ 
+
+              {hasWon && (
+
+                <div className="absolute inset-0 bg-white/95 rounded-3xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500 z-10">
+
+                  <Sparkles className="w-16 h-16 text-yellow-500 animate-bounce mb-3" />
+
+                  <h3 className="text-2xl font-black text-indigo-950">Completato con Successo! 🏆</h3>
+
+                  <p className="text-sm text-slate-600 mt-2 max-w-xs font-semibold leading-relaxed">
+
+                    Hai ricostruito perfettamente la ruota cromatico-armonica di Itten!
+
+                  </p>
+
+                  <div className="bg-yellow-100 text-yellow-900 px-4 py-1 rounded-full text-xs font-black mt-4 animate-pulse">
+
+                    +200 PUNTI BONUS ACCREDITATI
+
+                  </div>
+
+                </div>
+
+              )}
+
+            </div>
+
+          </div>
+
+ 
+
+          <div className="md:col-span-5 space-y-6">
+
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+
+              <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">Tasselli dei Colori ({tray.length}/12)</span>
+
+              <button
+
+                onClick={resetGame}
+
+                className="text-slate-500 hover:text-slate-800 transition-colors p-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl"
+
+                title="Ricomincia il puzzle"
+
+              >
+
+                <RefreshCcw className="w-4.5 h-4.5" />
+
+              </button>
+
+            </div>
+
+ 
+
+            {tray.length > 0 ? (
+
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[220px] overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-100">
+
+                {tray.map((color) => (
+
+                  <div
+
+                    key={color.id}
+
+                    draggable
+
+                    onDragStart={(e) => handleDragStart(e, color.id)}
+
+                    onClick={() => handleTrayClick(color.id)}
+
+                    className={`p-3 rounded-2xl flex flex-col items-center justify-center border cursor-grab hover:scale-105 active:cursor-grabbing transition-all ${
+
+                      selectedTrayId === color.id ? 'border-indigo-600 bg-indigo-50 shadow-md ring-2 ring-indigo-300' : 'border-slate-200 bg-white shadow-sm'
+
+                    }`}
+
+                  >
+
+                    <div className="w-10 h-10 rounded-full shadow-inner mb-2 border border-slate-200" style={{ backgroundColor: color.hex }}></div>
+
+                    <span className="text-[10px] font-black text-slate-700 text-center truncate w-full">{color.name}</span>
+
+                  </div>
+
+                ))}
+
+              </div>
+
+            ) : (
+
+              !hasWon && (
+
+                <div className="p-8 bg-green-50 rounded-2xl border border-green-150 text-center text-green-700 text-sm font-semibold">
+
+                  Tutti i colori sono stati posizionati sulla tavolozza!
+
+                </div>
+
+              )
+
+            )}
+
+ 
+
+            <div className="p-5 rounded-2xl border min-h-[120px] flex flex-col justify-center transition-all bg-slate-50 border-slate-150">
+
+              {activeHint ? (
+
+                activeHint.error ? (
+
+                  <div className="space-y-1">
+
+                    <span className="text-xs uppercase font-extrabold text-red-600 flex items-center gap-1">
+
+                      <XCircle className="w-4 h-4" /> Riscontro d'Errore
+
+                    </span>
+
+                    <p className="text-xs text-red-950 leading-relaxed font-semibold">{activeHint.desc}</p>
+
+                  </div>
+
+                ) : (
+
+                  <div className="space-y-1">
+
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Informazione Colore</span>
+
+                    <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
+
+                      <span className="inline-block w-3.5 h-3.5 rounded-full shadow-inner border border-slate-300" style={{ backgroundColor: activeHint.hex }}></span>
+
+                      {activeHint.name}
+
+                    </h4>
+
+                    <p className="text-xs text-slate-600 leading-relaxed pt-1">{activeHint.desc}</p>
+
+                  </div>
+
+                )
+
+              ) : (
+
+                <div className="text-center text-slate-400 space-y-2 py-2">
+
+                  <HelpCircle className="w-8 h-8 mx-auto opacity-40 stroke-[1.5]" />
+
+                  <p className="text-xs font-semibold max-w-[200px] mx-auto leading-relaxed">
+
+                    Trascina una tinta o cliccala per scoprirne le risonanze cromatiche e i dettagli.
+
+                  </p>
+
+                </div>
+
+              )}
+
+            </div>
+
+ 
+
+          </div>
+
+        </div>
+
+ 
+
+        <div className="flex justify-end pt-4 border-t border-slate-100">
+
+          <button onClick={onBack} className="border-2 border-slate-200 hover:bg-slate-50 font-bold py-3 px-6 rounded-2xl text-xs transition-colors">
+
+            Torna al Menu Principale
+
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+ 
+
+/* --- RE-INTRODUZIONE DEI COMPONENTI LIVELLI DI QUIZ --- */
+
+function QuizLevel({ levelData, showFeedback }) {
+
+  const handleSelect = (idx) => {
+
+    if (idx === levelData.correct) {
+
+      showFeedback(true, levelData.expl);
+
+    } else {
+
+      showFeedback(false, "Non corretto. Ricorda: " + levelData.expl, 0);
+
+    }
+
+  };
+
+ 
+
+  return (
+
+    <div className="flex flex-col items-center max-w-2xl mx-auto w-full">
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+
+        {levelData.options.map((opt, idx) => (
+
+          <button
+
+            key={idx}
+
+            onClick={() => handleSelect(idx)}
+
+            className="p-5 text-left border-2 border-slate-200 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50/50 hover:shadow-sm transition-all text-base font-semibold text-slate-700 flex items-center min-h-[72px]"
+
+          >
+
+            <span className="inline-block bg-slate-100 text-slate-500 w-8 h-8 text-center leading-8 rounded-full mr-3 font-bold text-xs flex-shrink-0">
+
+              {String.fromCharCode(65 + idx)}
+
+            </span>
+
+            <span>{opt}</span>
+
+          </button>
+
+        ))}
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+ 
+
+function InteractivePrimaries({ showFeedback }) {
+
+  const [selected, setSelected] = useState([]);
+
+ 
+
+  const options = [
+
+    { id: 'green', hex: '#22C55E', name: 'Verde' },
+
+    { id: 'red', hex: '#EF4444', name: 'Rosso' },
+
+    { id: 'purple', hex: '#A855F7', name: 'Viola' },
+
+    { id: 'yellow', hex: '#EAB308', name: 'Giallo' },
+
+    { id: 'orange', hex: '#F97316', name: 'Arancione' },
+
+    { id: 'blue', hex: '#3B82F6', name: 'Blu' }
+
+  ];
+
+ 
+
+  const handleSelect = (color) => {
+
+    if (selected.includes(color.id)) {
+
+      setSelected(selected.filter(id => id !== color.id));
+
+    } else if (selected.length < 3) {
+
+      const newSelected = [...selected, color.id];
+
+      setSelected(newSelected);
+
+      if (newSelected.length === 3) {
+
+        const isCorrect = newSelected.includes('red') && newSelected.includes('yellow') && newSelected.includes('blue');
+
+        if (isCorrect) {
+
+          showFeedback(true, "Esatto! Rosso, Giallo e Blu sono i tre colori primari fondamentali del cerchio di Itten, indivisibili e puri.");
+
+        } else {
+
+          showFeedback(false, "Attenzione: hai selezionato dei colori secondari (nati da miscele). Riprova!", 0);
+
+          setTimeout(() => setSelected([]), 1500);
+
+        }
+
+      }
+
+    }
+
+  };
+
+ 
+
+  return (
+
+    <div className="text-center">
+
+      <p className="text-sm text-slate-500 mb-6 font-medium">Seleziona i 3 colori primari toccandoli:</p>
+
+      <div className="grid grid-cols-3 gap-6 max-w-sm mx-auto">
+
+        {options.map((color) => (
+
+          <button
+
+            key={color.id}
+
+            onClick={() => handleSelect(color)}
+
+            className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto transition-all duration-300 shadow-md ${
+
+              selected.includes(color.id) ? 'ring-4 ring-offset-4 ring-slate-800 scale-110 shadow-lg' : 'hover:scale-105'
+
+            }`}
+
+            style={{ backgroundColor: color.hex }}
+
+            title={color.name}
+
+          />
+
+        ))}
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+ 
+
+function InteractiveMix({ showFeedback, levelData }) {
+
+  const [slot1, setSlot1] = useState(null);
+
+  const [slot2, setSlot2] = useState(null);
+
+ 
+
+  const handleSelect = (color) => {
+
+    if (!slot1) setSlot1(color);
+
+    else if (!slot2) {
+
+      setSlot2(color);
+
+      const isCorrect = levelData.req.includes(slot1?.id || color.id) && levelData.req.includes(slot2?.id || color.id) && slot1?.id !== color.id;
+
+      if (isCorrect) {
+
+        showFeedback(true, `Perfetto! Mescolando ${slot1.name} e ${color.name} hai ottenuto il colore secondario richiesto.`);
+
+      } else {
+
+        showFeedback(false, `Miscela errata! Questi due colori non producono la tonalità attesa.`, 0);
+
+        setTimeout(() => { setSlot1(null); setSlot2(null); }, 1500);
+
+      }
+
+    }
+
+  };
+
+ 
+
+  return (
+
+    <div className="text-center flex flex-col items-center">
+
+      <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-2xl inline-block">
+
+        <h3 className="text-xs uppercase font-extrabold tracking-wider text-slate-500 mb-2">Obiettivo: Crea il {levelData.target.name}</h3>
+
+        <div className="w-14 h-14 rounded-full mx-auto shadow-inner ring-4 ring-white" style={{ backgroundColor: levelData.target.hex }}></div>
+
+      </div>
+
+ 
+
+      <div className="flex items-center gap-4 sm:gap-6 mb-8">
+
+        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-dashed border-slate-300 flex items-center justify-center bg-slate-50 text-slate-400 font-bold" style={{ backgroundColor: slot1?.hex }}>
+
+          {!slot1 && "Colore 1"}
+
+        </div>
+
+        <div className="text-2xl font-bold text-slate-300">+</div>
+
+        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-dashed border-slate-300 flex items-center justify-center bg-slate-50 text-slate-400 font-bold" style={{ backgroundColor: slot2?.hex }}>
+
+          {!slot2 && "Colore 2"}
+
+        </div>
+
+        <div className="text-2xl font-bold text-slate-300">=</div>
+
+        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-slate-200 bg-slate-100 flex items-center justify-center text-slate-400 text-lg">
+
+          ?
+
+        </div>
+
+      </div>
+
+ 
+
+      <div className="flex gap-4">
+
+        {[COLORS.red, COLORS.blue, COLORS.yellow].map(color => (
+
+          <button
+
+            key={color.id}
+
+            onClick={() => handleSelect(color)}
+
+            className="w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-md hover:scale-110 transition-transform"
+
+            style={{ backgroundColor: color.hex }}
+
+            title={color.name}
+
+          />
+
+        ))}
+
+        <button onClick={() => { setSlot1(null); setSlot2(null); }} className="p-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors">
+
+          <RefreshCcw className="w-5 h-5" />
+
+        </button>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+ 
+
+function InteractiveComplementary({ showFeedback, levelData }) {
+
+  const handleSelect = (color) => {
+
+    if (color.id === levelData.correctId) {
+
+      showFeedback(true, "Esatto! Nel cerchio di Itten questi due colori sono situati in posizioni diametralmente opposte, manifestando il massimo contrasto.");
+
+    } else {
+
+      showFeedback(false, "Riprova: osserva mentalmente la posizione sul disco. Quale si trova esattamente sul lato opposto?", 0);
+
+    }
+
+  };
+
+ 
+
+  return (
+
+    <div className="text-center flex flex-col items-center">
+
+       <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Colore di Partenza</span>
+
+       <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full mb-8 shadow-xl ring-4 ring-slate-100 animate-pulse" style={{ backgroundColor: levelData.target.hex }}></div>
+
+      
+
+       <p className="text-sm font-semibold text-slate-500 mb-4">Scegli il suo complementare opposto:</p>
+
+       <div className="flex gap-6">
+
+          {[COLORS.green, COLORS.orange, COLORS.purple].map(color => (
+
+            <div key={color.id} className="flex flex-col items-center gap-2">
+
+              <button
+
+                onClick={() => handleSelect(color)}
+
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-md hover:scale-110 transition-transform"
+
+                style={{ backgroundColor: color.hex }}
+
+              />
+
+              <span className="font-bold text-xs text-slate-500">{color.name}</span>
+
+            </div>
+
+          ))}
+
+       </div>
+
+    </div>
+
+  );
+
+}
+
+ 
+
+function InteractiveLight({ showFeedback }) {
+
+  const [value, setValue] = useState(50);
+
+ 
+
+  const checkAnswer = () => {
+
+    if (value > 75) {
+
+      showFeedback(true, "Magnifico! Aggiungendo luce (Bianco) hai aumentato il valore luminoso riducendo la saturazione, creando un colore pastello rosa ('silenzioso') pacato e dolce.");
+
+    } else if (value < 25) {
+
+      showFeedback(false, "Hai aggiunto del nero (Ombra) scurendo la tonalità, mentre l'obiettivo era schiarirla per renderla silenziosa!", 0);
+
+    } else {
+
+      showFeedback(false, "Sposta maggiormente il cursore verso destra per schiarire e 'silenziare' nettamente il colore.", 0);
+
+    }
+
+  };
+
+ 
+
+  const getMixedColor = () => {
+
+    if (value === 50) return '#EF4444';
+
+    if (value > 50) return `color-mix(in srgb, #EF4444, white ${(value - 50) * 2}%)`;
+
+    return `color-mix(in srgb, #EF4444, black ${(50 - value) * 2}%)`;
+
+  };
+
+ 
+
+  return (
+
+    <div className="text-center flex flex-col items-center w-full max-w-sm mx-auto">
+
+      <div
+
+        className="w-36 h-36 sm:w-40 sm:h-40 rounded-3xl shadow-inner border-4 border-slate-100 mb-8 transition-colors duration-200"
+
+        style={{ backgroundColor: getMixedColor() }}
+
+      ></div>
+
+ 
+
+      <div className="flex items-center gap-3 w-full mb-8 bg-slate-100 p-4 rounded-2xl">
+
+        <Moon className="text-slate-800 w-6 h-6 flex-shrink-0" />
+
+        <input
+
+          type="range"
+
+          min="0"
+
+          max="100"
+
+          value={value}
+
+          onChange={(e) => setValue(parseInt(e.target.value))}
+
+          className="w-full h-3 bg-gradient-to-r from-black via-[#EF4444] to-white rounded-lg appearance-none cursor-pointer"
+
+        />
+
+        <Sun className="text-amber-400 w-6 h-6 flex-shrink-0" />
+
+      </div>
+
+ 
+
+      <button onClick={checkAnswer} className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3 px-8 rounded-full text-base transition-transform hover:scale-105 shadow-md">
+
+        Conferma la Tonalità
+
+      </button>
+
+    </div>
+
+  );
+
+}
